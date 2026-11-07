@@ -17,12 +17,15 @@ class SubstrateSensor {
  public:
   explicit SubstrateSensor(uint8_t pin) : oneWire_(pin), probes_(&oneWire_) {}
 
+  // Returns whether a probe answered. The probe is optional: false is not an error.
   bool begin();
+  // Latest completed conversion; invalid when absent or disconnected.
   SubstrateReading read();
 
  private:
   OneWire oneWire_;
   DallasTemperature probes_;
+  SubstrateReading last_{0.0f, false};
 };
 
 }  // namespace terrarium::sensors

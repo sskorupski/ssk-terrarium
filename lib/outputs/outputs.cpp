@@ -13,7 +13,7 @@ void Outputs::begin() {
 }
 
 void Outputs::apply(const OutputState& state) {
-  // TODO(phase 1): enforce kHeatContinuousMaxMs and kMistPulseMaxMs here.
+  // TODO(phase 4): enforce kMistPulseMaxMs here, when misting is wired.
   write(pins_.heater, state.heater);
   write(pins_.light, state.light);
   write(pins_.mistPump, state.mistPump);
