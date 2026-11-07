@@ -79,8 +79,8 @@ Le moniteur est le terminal ouvert à l'étape 3 : ce qu'on y tape part directem
 
 1. Cliquer dans la zone du terminal où s'affichent les messages de la carte.
 2. Taper `MODE HIBERNATION`, en majuscules, avec une espace entre les deux mots, puis appuyer sur **Entrée**. Sans **Local echo**, les lettres tapées ne s'affichent pas : seule la réponse de la carte apparaît.
-3. La carte répond `MODE HIBERNATION`.
-4. Appuyer sur **RESET** : la carte redémarre et écrit de nouveau `MODE HIBERNATION`. Le mode survit à une coupure, ce qui garde le hors-gel actif l'hiver après une panne de courant.
+3. La carte répond `MODE HIBERNATION`. Avec **Local echo**, sa réponse s'écrit par-dessus la commande tapée, identique : on ne voit qu'une ligne. Le geste suivant lève le doute.
+4. Appuyer sur **RESET** : la carte redémarre et écrit de nouveau `MODE HIBERNATION`, sans la ligne `nvs_open failed` du premier démarrage. Le mode survit à une coupure, ce qui garde le hors-gel actif l'hiver après une panne de courant.
 5. Taper `MODE MAINTENANCE` puis **Entrée** pour remettre la carte en maintenance ; elle répond `MODE MAINTENANCE`.
 
 Une commande mal tapée (`mode actif` en minuscules par exemple) donne `ERREUR commande inconnue` et ne change rien. La touche d'effacement n'est pas comprise par la carte : en cas de faute de frappe, appuyer sur **Entrée** et retaper la commande.
