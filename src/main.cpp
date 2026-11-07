@@ -168,8 +168,7 @@ void restoreMode() {
   } else {
     Serial.println("INFO aucun mode enregistre, demarrage en MAINTENANCE");
   }
-  Serial.print("MODE ");
-  Serial.println(terrarium::control::toString(modeMachine.mode()));
+  Serial.printf("MODE %s au demarrage\n", terrarium::control::toString(modeMachine.mode()));
 }
 
 void handleSerialLine(const char* line) {
@@ -178,12 +177,17 @@ void handleSerialLine(const char* line) {
     Serial.println("ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE)");
     return;
   }
-  if (modeMachine.request(target) &&
-      !settingsStore.saveMode(terrarium::control::modeToStored(target))) {
-    Serial.println("ERREUR mode non enregistre");
+  // Each reply differs from the command typed, so that a terminal echoing the
+  // command still shows that the board answered.
+  const char* name = terrarium::control::toString(target);
+  if (!modeMachine.request(target)) {
+    Serial.printf("MODE %s deja actif\n", name);
+  } else if (settingsStore.saveMode(terrarium::control::modeToStored(target))) {
+    Serial.printf("MODE %s enregistre, conserve apres coupure\n", name);
+  } else {
+    Serial.printf("ERREUR mode %s applique mais non enregistre, perdu a la prochaine coupure\n",
+                  name);
   }
-  Serial.print("MODE ");
-  Serial.println(terrarium::control::toString(modeMachine.mode()));
 }
 
 // Reads the serial link without blocking, one line at a time. A line ends
