@@ -63,19 +63,15 @@ Au tout premier démarrage, elle n'a aucun mode enregistré : elle démarre en `
 
 ## Étape 4 — Changer de mode
 
-Taper dans le moniteur, puis Entrée — la console du navigateur n'affiche pas ce qu'on tape, seule la réponse de la carte apparaît :
+Le moniteur est la console ouverte à l'étape 3, la zone noire où s'affichent les messages de la carte : ce qu'on y tape part directement vers la carte.
 
-```
-MODE HIBERNATION
-```
+1. Cliquer dans la zone noire de la console.
+2. Taper `MODE HIBERNATION`, en majuscules, avec une espace entre les deux mots, puis appuyer sur **Entrée**. La console du navigateur n'affiche pas les lettres tapées : seule la réponse de la carte apparaît.
+3. La carte répond `MODE HIBERNATION`.
+4. Appuyer sur **RESET** : la carte redémarre et écrit de nouveau `MODE HIBERNATION`. Le mode survit à une coupure, ce qui garde le hors-gel actif l'hiver après une panne de courant.
+5. Taper `MODE MAINTENANCE` puis **Entrée** pour remettre la carte en maintenance ; elle répond `MODE MAINTENANCE`.
 
-La carte répond `MODE HIBERNATION`. Appuyer sur **RESET** : elle redémarre et écrit de nouveau `MODE HIBERNATION`. Le mode survit à une coupure, ce qui garde le hors-gel actif l'hiver après une panne de courant.
-
-Une commande mal tapée (`mode actif` en minuscules par exemple) donne `ERREUR commande inconnue` et ne change rien. Remettre ensuite la carte en maintenance :
-
-```
-MODE MAINTENANCE
-```
+Une commande mal tapée (`mode actif` en minuscules par exemple) donne `ERREUR commande inconnue` et ne change rien. Comme rien ne s'affiche, la touche d'effacement n'aide pas : en cas de faute de frappe, appuyer sur **Entrée** et retaper la commande.
 
 ## Étape 5 — Observer le défaut capteur
 
