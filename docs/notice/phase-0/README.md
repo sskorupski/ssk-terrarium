@@ -65,6 +65,14 @@ MODE MAINTENANCE
 
 Au tout premier démarrage, elle n'a aucun mode enregistré : elle démarre en `MAINTENANCE`, où tout est coupé.
 
+Les lignes qui précèdent (`ets Jul 29 2019`, `rst:0x1`, `load:0x…`, `entry 0x…`) viennent du programme de démarrage de la puce et sont normales. Tant qu'aucun mode n'a été enregistré, une ligne d'erreur les suit :
+
+```
+[E][Preferences.cpp:50] begin(): nvs_open failed: NOT_FOUND
+```
+
+Elle dit seulement que la mémoire de réglages est encore vide ; elle disparaît dès le premier changement de mode, à l'étape 4.
+
 ## Étape 4 — Changer de mode
 
 Le moniteur est le terminal ouvert à l'étape 3 : ce qu'on y tape part directement vers la carte.
