@@ -6,7 +6,7 @@ Le besoin, les règles de gestion, la nomenclature et le montage vivent dans le 
 
 ## État
 
-Phase 0, le socle : il compile pour l'ESP32 et ses tests passent sur un ordinateur. Chauffage et modes sont en place ; les capteurs, la supervision (page web, MQTT, alertes) et la brumisation restent des bouchons, à remplir phase par phase.
+Phase 1 en cours : capteurs, chauffage par hystérésis et hors-gel, modes et protections sont écrits et testés sur ordinateur ; ils restent à éprouver sur le montage. La supervision (page web, MQTT, alertes) et la brumisation restent des bouchons, à remplir phase par phase.
 
 **Ne branchez aucune charge 230 V** avant d'avoir mesuré le niveau de déclenchement du module relais et confirmé `kOutputOffLevel` dans `include/config.h`.
 

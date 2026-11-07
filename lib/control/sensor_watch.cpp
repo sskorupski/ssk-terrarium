@@ -1,6 +1,21 @@
 #include "sensor_watch.h"
 
+#include <cmath>
+
 namespace terrarium::control {
+
+namespace {
+
+constexpr float kAirMinC = -20.0f;
+constexpr float kAirMaxC = 60.0f;
+
+}  // namespace
+
+bool isPlausibleAirReading(float temperatureC, float humidityRhPercent) {
+  // Written so that NaN, which fails every comparison, is rejected.
+  return temperatureC >= kAirMinC && temperatureC <= kAirMaxC && humidityRhPercent >= 0.0f &&
+         humidityRhPercent <= 100.0f;
+}
 
 SensorHealth SensorWatch::update(uint32_t nowMs, bool valid) {
   if (valid) {

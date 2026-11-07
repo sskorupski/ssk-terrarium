@@ -12,6 +12,11 @@ enum class SensorHealth : uint8_t {
   kFault,    // Invalid beyond the limit: heating and misting off.
 };
 
+// Whether an air reading can be true in the garage terrarium. Anything outside
+// -20..60 °C or 0..100 %RH, or NaN, comes from a faulty sensor or bus, and
+// counts as no reading (RG-capteur-en-defaut).
+bool isPlausibleAirReading(float temperatureC, float humidityRhPercent);
+
 class SensorWatch {
  public:
   explicit constexpr SensorWatch(uint32_t maxSilentMs) : maxSilentMs_(maxSilentMs) {}

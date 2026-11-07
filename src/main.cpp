@@ -8,11 +8,10 @@
 #include <esp_idf_version.h>
 #include <esp_task_wdt.h>
 
-#include <cmath>
-
 #include "air_sensor.h"
 #include "alerts.h"
 #include "config.h"
+#include "heat_guard.h"
 #include "hysteresis_regulator.h"
 #include "mode_machine.h"
 #include "mqtt_link.h"
@@ -23,7 +22,13 @@
 #include "substrate_sensor.h"
 #include "web_ui.h"
 
+// Set by outils/version_firmware.py from `git describe`.
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "inconnue"
+#endif
+
 namespace cfg = terrarium::config;
+using terrarium::control::HeatGuard;
 using terrarium::control::HeatingPolicy;
 using terrarium::control::HysteresisRegulator;
 using terrarium::control::Mode;
@@ -51,6 +56,7 @@ terrarium::alerts::Notifier notifier;
 
 ModeMachine modeMachine(kFallbackBootMode);
 SensorWatch airWatch(cfg::kSensorSilentMaxMs);
+HeatGuard heatGuard(cfg::kHeatContinuousMaxMs, cfg::kHeatPauseMs);
 HysteresisRegulator activeHeating =
     HysteresisRegulator::aroundSetpoint(cfg::kSetpointC, cfg::kHeatHysteresisC);
 HysteresisRegulator frostHeating(cfg::kFrostHeatOnBelowC, cfg::kFrostHeatOffAtC);
@@ -94,14 +100,16 @@ bool heaterFrom(HysteresisRegulator& regulator, SensorHealth health, float tempe
 }
 
 // One regulation step. Misting, light and fan stay off in phase 1
-// (RG-sorties-par-mode); an air sensor in fault switches heating off.
+// (RG-sorties-par-mode); an air sensor in fault switches heating off, and so
+// does heating for too long (RG-chauffe-continue-bornee).
 void regulate(const terrarium::sensors::AirReading& air, uint32_t nowMs) {
   const SensorHealth previous = airWatch.health();
-  const SensorHealth health = airWatch.update(nowMs, air.valid && !std::isnan(air.temperatureC));
+  const SensorHealth health =
+      airWatch.update(nowMs, air.valid && terrarium::control::isPlausibleAirReading(
+                                              air.temperatureC, air.humidityRhPercent));
   if (health != previous && (health == SensorHealth::kFault || previous == SensorHealth::kFault)) {
     Serial.println(health == SensorHealth::kFault ? "DEFAUT capteur air" : "REPRISE capteur air");
   }
-  digitalWrite(cfg::kPinStatusLed, health == SensorHealth::kFault ? HIGH : LOW);
 
   const terrarium::control::ModePolicy policy = modeMachine.policy();
   terrarium::outputs::OutputState next{false, false, false, false};
@@ -121,12 +129,39 @@ void regulate(const terrarium::sensors::AirReading& air, uint32_t nowMs) {
       break;
   }
 
-  // TODO(phase 1): continuous-heat cap (kHeatContinuousMaxMs); how heating
-  // resumes after the cap is still open in the cadrage.
+  const bool wasPaused = heatGuard.paused();
+  next.heater = heatGuard.filter(nowMs, next.heater);
+  if (heatGuard.paused() != wasPaused) {
+    Serial.println(heatGuard.paused() ? "PAUSE chauffage apres 2 h continues"
+                                      : "REPRISE chauffage");
+  }
+  const bool fault = health == SensorHealth::kFault || heatGuard.paused();
+  digitalWrite(cfg::kPinStatusLed, fault ? HIGH : LOW);
+
   // TODO(phase 2): light from the NTP time when policy.lightAllowed.
   // TODO(phase 2): periodic fan cycles in ACTIF (kFanCyclePeriodMs).
   // TODO(phase 4): misting pulses when policy.mistAllowed and air.valid.
   outputs.apply(next);
+}
+
+// One line per measurement cycle, for the commissioning checks of the notice.
+// Invalid readings print as "--".
+void reportMeasures(const terrarium::sensors::AirReading& air,
+                    const terrarium::sensors::SubstrateReading& substrate) {
+  Serial.print("MESURE air=");
+  if (air.valid) {
+    Serial.printf("%.1fC hr=%.0f%%", air.temperatureC, air.humidityRhPercent);
+  } else {
+    Serial.print("-- hr=--");
+  }
+  Serial.print(" substrat=");
+  if (substrate.valid) {
+    Serial.printf("%.1fC", substrate.temperatureC);
+  } else {
+    Serial.print("--");
+  }
+  Serial.printf(" chauffage=%d mode=%s\n", outputs.state().heater ? 1 : 0,
+                terrarium::control::toString(modeMachine.mode()));
 }
 
 // Restores the last saved mode, or stays in MAINTENANCE (RG-mode-au-demarrage).
@@ -135,9 +170,10 @@ void restoreMode() {
   Mode mode = kFallbackBootMode;
   if (settingsStore.loadMode(stored) && terrarium::control::modeFromStored(stored, mode)) {
     modeMachine.request(mode);
+  } else {
+    Serial.println("INFO aucun mode enregistre, demarrage en MAINTENANCE");
   }
-  Serial.print("MODE ");
-  Serial.println(terrarium::control::toString(modeMachine.mode()));
+  Serial.printf("MODE %s au demarrage\n", terrarium::control::toString(modeMachine.mode()));
 }
 
 void handleSerialLine(const char* line) {
@@ -146,12 +182,17 @@ void handleSerialLine(const char* line) {
     Serial.println("ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE)");
     return;
   }
-  if (modeMachine.request(target) &&
-      !settingsStore.saveMode(terrarium::control::modeToStored(target))) {
-    Serial.println("ERREUR mode non enregistre");
+  // Each reply differs from the command typed, so that a terminal echoing the
+  // command still shows that the board answered.
+  const char* name = terrarium::control::toString(target);
+  if (!modeMachine.request(target)) {
+    Serial.printf("MODE %s deja actif\n", name);
+  } else if (settingsStore.saveMode(terrarium::control::modeToStored(target))) {
+    Serial.printf("MODE %s enregistre, conserve apres coupure\n", name);
+  } else {
+    Serial.printf("ERREUR mode %s applique mais non enregistre, perdu a la prochaine coupure\n",
+                  name);
   }
-  Serial.print("MODE ");
-  Serial.println(terrarium::control::toString(modeMachine.mode()));
 }
 
 // Reads the serial link without blocking, one line at a time. A line ends
@@ -201,12 +242,15 @@ void setup() {
   pinMode(cfg::kPinStatusLed, OUTPUT);
   digitalWrite(cfg::kPinStatusLed, LOW);
   Serial.begin(115200);
+  // Separates the firmware's own lines from the chip's boot messages above.
+  Serial.println();
+  Serial.println("=== ssk-terrarium " FIRMWARE_VERSION " : demarrage ===");
 
   startWatchdog();
 
   Wire.begin(cfg::kPinI2cSda, cfg::kPinI2cScl);
-  airSensor.begin();
-  substrateSensor.begin();
+  if (!airSensor.begin()) Serial.println("ABSENT capteur air");
+  if (!substrateSensor.begin()) Serial.println("ABSENTE sonde substrat (optionnelle)");
 
   restoreMode();
   terrarium::storage::Settings settings{};
@@ -216,6 +260,8 @@ void setup() {
   webUi.begin();
   mqttLink.begin();
   notifier.begin();
+
+  Serial.println("=== pret : regulation en cours ===");
 }
 
 void loop() {
@@ -225,8 +271,9 @@ void loop() {
   if (!firstReadDone || nowMs - lastSensorReadMs >= cfg::kSensorPeriodMs) {
     firstReadDone = true;
     lastSensorReadMs = nowMs;
-    regulate(airSensor.read(), nowMs);
-    substrateSensor.read();
+    const terrarium::sensors::AirReading air = airSensor.read();
+    regulate(air, nowMs);
+    reportMeasures(air, substrateSensor.read());
   }
 
   pollSerial();

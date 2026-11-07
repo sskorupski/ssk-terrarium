@@ -57,6 +57,8 @@ constexpr float kFrostHeatOffAtC = 6.0f;
 
 constexpr uint32_t kMistPulseMaxMs = 30UL * 1000UL;
 constexpr uint32_t kHeatContinuousMaxMs = 2UL * 60UL * 60UL * 1000UL;
+// Off time after the continuous-heat cap, then heating resumes on its own.
+constexpr uint32_t kHeatPauseMs = 15UL * 60UL * 1000UL;
 constexpr uint32_t kSensorSilentMaxMs = 2UL * 60UL * 1000UL;
 
 // --- Alert thresholds (cadrage F9) --------------------------------------------

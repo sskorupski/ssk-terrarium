@@ -1,9 +1,11 @@
 #include <unity.h>
 
+#include <cmath>
 #include <cstdint>
 
 #include "sensor_watch.h"
 
+using terrarium::control::isPlausibleAirReading;
 using terrarium::control::SensorHealth;
 using terrarium::control::SensorWatch;
 
@@ -71,6 +73,23 @@ void test_survives_millis_wrap_around() {
   TEST_ASSERT_EQUAL(SensorHealth::kFault, watch.update(beforeWrap + kMaxSilentMs + 1, false));
 }
 
+// RG-capteur-en-defaut: an aberrant reading counts as no reading.
+void test_accepts_terrarium_conditions() {
+  TEST_ASSERT_TRUE(isPlausibleAirReading(19.0f, 85.0f));
+  TEST_ASSERT_TRUE(isPlausibleAirReading(4.0f, 100.0f));
+  TEST_ASSERT_TRUE(isPlausibleAirReading(-20.0f, 0.0f));
+  TEST_ASSERT_TRUE(isPlausibleAirReading(60.0f, 50.0f));
+}
+
+void test_rejects_aberrant_readings() {
+  TEST_ASSERT_FALSE(isPlausibleAirReading(-20.1f, 80.0f));
+  TEST_ASSERT_FALSE(isPlausibleAirReading(60.1f, 80.0f));
+  TEST_ASSERT_FALSE(isPlausibleAirReading(19.0f, -0.1f));
+  TEST_ASSERT_FALSE(isPlausibleAirReading(19.0f, 100.1f));
+  TEST_ASSERT_FALSE(isPlausibleAirReading(NAN, 80.0f));
+  TEST_ASSERT_FALSE(isPlausibleAirReading(19.0f, NAN));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_valid_reading_is_ok);
@@ -81,5 +100,7 @@ int main() {
   RUN_TEST(test_recovers_on_first_valid_reading);
   RUN_TEST(test_a_valid_reading_restarts_the_silence_count);
   RUN_TEST(test_survives_millis_wrap_around);
+  RUN_TEST(test_accepts_terrarium_conditions);
+  RUN_TEST(test_rejects_aberrant_readings);
   return UNITY_END();
 }
