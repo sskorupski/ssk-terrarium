@@ -26,6 +26,6 @@ Ce document gouverne l'intérieur d'une unité ; les frontières entre couches s
 
 ## Ce que l'outillage impose
 
-- **Format** : clang-format 23.1.2, style Google, 100 colonnes (`.clang-format`), vérifié par la CI.
+- **Format** : clang-format, à la version de `requirements-ci.txt`, style Google, 100 colonnes (`.clang-format`), vérifié par la CI.
 - **Avertissements** : `-Wall -Wextra` partout ; `-Werror` en plus pour la compilation native du cœur. La compilation ESP32 n'a pas `-Werror`, parce que les bibliothèques tierces y émettent des avertissements que le projet ne peut pas corriger.
 - **Pas d'analyse statique** pour l'instant : `pio check` (cppcheck) n'est pas configuré, et rien ici ne prétend le contraire.

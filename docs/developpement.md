@@ -30,7 +30,7 @@ Commandes de la liaison série : `MODE ACTIF`, `MODE HIBERNATION`, `MODE MAINTEN
 
 ## Outils et versions
 
-- PlatformIO Core 6.2.0 et clang-format 23.1.2 : les versions de la CI sont dans `requirements-ci.txt`. Pour s'y aligner : `pip install -r requirements-ci.txt` dans un environnement virtuel.
+- PlatformIO Core et clang-format : leurs versions sont épinglées dans `requirements-ci.txt`, que Dependabot fait monter. Pour s'y aligner : `pip install -r requirements-ci.txt` dans un environnement virtuel.
 - La plateforme `espressif32@7.1.3` apporte le cœur Arduino-ESP32 2.0.17 (ESP-IDF 4.4). `main.cpp` sait aussi armer le chien de garde d'un cœur 3.x (ESP-IDF 5), pour le jour où la plateforme montera.
 
 ## Pièges
