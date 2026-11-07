@@ -28,6 +28,7 @@ Le vocabulaire du cœur est celui du domaine — mode, consigne, hors-gel, défa
 **Tout message que la carte écrit se comprend sans connaître le code** : il dit, en français et avec les mots de la notice, ce qui se passe et ce que la carte fait en conséquence. Qui suit la notice n'a que ces lignes pour savoir si son montage va bien ; un message obscur l'arrête, et un message qui ressemble à une panne lui fait défaire un montage correct.
 
 - Un mot-clé en majuscules ouvre la ligne, puis vient la phrase : `MODE`, `MESURE`, `INFO`, `ABSENT`, `DEFAUT`, `REPRISE`, `PAUSE`, `ERREUR`. Le mot-clé se filtre, la phrase se lit.
+- Des titres de section `=== … ===` découpent le journal : le premier, avec la version du firmware, sépare ses lignes des messages de démarrage de la puce, qu'il ne contrôle pas ; un autre dit quand l'initialisation est finie. Qui lit le journal sait où regarder, et quelle notice suit la carte.
 - Une situation normale ne s'affiche jamais comme une erreur. Le premier démarrage écrit `INFO aucun mode enregistre, demarrage en MAINTENANCE`, et non le `nvs_open failed: NOT_FOUND` de la bibliothèque `Preferences` : un message de bibliothèque ou du cœur Arduino qui sort dans un cas normal s'évite à la source, et le firmware dit lui-même ce qu'il en est.
 - Un `ERREUR` dit ce qui était attendu : `ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE)`.
 - Les textes s'écrivent sans accents, pour qu'un terminal mal réglé les affiche intacts.
