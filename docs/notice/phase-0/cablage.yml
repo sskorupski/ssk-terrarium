@@ -1,4 +1,5 @@
-# Phase 0 wiring: the status LED alone (RG-brochage, BOM line 6).
+# Phase 0 wiring: the status LED alone (RG-brochage, BOM line 6), optional in
+# phase 0 and required from phase 1 on.
 # Source of cablage.svg: regenerate with outils/schemas.sh after any change.
 metadata:
   title: Phase 0 — LED d'état
@@ -18,7 +19,7 @@ cables:
     wirecount: 1
     colors: [YE]
     category: bundle
-    type: Fil Dupont mâle + résistance 330 Ω en série
+    type: Fil Dupont mâle + résistance 330 Ω (orange, orange, marron, or) en série
   W2:
     wirecount: 1
     colors: [BK]

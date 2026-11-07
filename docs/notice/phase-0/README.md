@@ -1,6 +1,6 @@
 # Phase 0 — La carte programmée
 
-À la fin de cette notice, la carte ESP32 tourne avec le firmware du régulateur, répond sur la liaison série, garde son mode après une coupure, et allume sa LED d'état quand le capteur d'air manque. Aucun capteur, aucun relais, aucune tension secteur : seulement la carte, un câble USB et une LED.
+À la fin de cette notice, la carte ESP32 tourne avec le firmware du régulateur, répond sur la liaison série, garde son mode après une coupure, et signale le défaut quand le capteur d'air manque. Aucun capteur, aucun relais, aucune tension secteur : seulement la carte, un câble USB et, si on l'a déjà, une LED.
 
 Durée : 30 minutes environ.
 
@@ -10,15 +10,18 @@ Durée : 30 minutes environ.
 | --- | --- |
 | Carte ESP32 | Keyestudio KS5016 (ESP32-WROOM-32, USB-C) |
 | Câble | USB-C vers l'ordinateur, qui transporte les données (pas un câble de charge seule) |
-| LED d'état | LED 3 mm, résistance 330 Ω, 2 fils Dupont mâles |
+| LED d'état | LED 3 mm, résistance 330 Ω (orange, orange, marron, or — ou orange, orange, noir, noir, marron sur une résistance à 5 anneaux), 2 fils Dupont mâles. Facultative en phase 0, nécessaire à partir de la phase 1 |
+| Multimètre | Facultatif : remplace la LED pour vérifier l'étape 5 |
 | Ordinateur | Avec le navigateur Chrome ou Edge, ou PlatformIO pour qui compile lui-même |
 | Firmware | `ssk-terrarium-phase-0.bin`, sur la page de la version `phase-0` |
 
-## Étape 1 — Câbler la LED d'état
+## Étape 1 — Câbler la LED d'état (facultative)
+
+Sans LED sous la main, passer à l'étape 2 : la liaison série annonce le même défaut que la LED, et l'étape 5 dit comment s'en passer. La LED devient nécessaire à la phase 1.
 
 Carte débranchée de l'USB :
 
-1. Plier une patte de la résistance de 330 Ω et l'insérer avec un fil Dupont dans le connecteur **GPIO 2** de la carte — ou souder la résistance au bout du fil.
+1. Plier une patte de la résistance de 330 Ω (orange, orange, marron, or) et l'insérer avec un fil Dupont dans le connecteur **GPIO 2** de la carte — ou souder la résistance au bout du fil.
 2. Relier l'autre patte de la résistance à la **patte longue** de la LED (l'anode).
 3. Relier la **patte courte** de la LED (la cathode, côté méplat) à un connecteur **GND** de la carte.
 
@@ -79,10 +82,11 @@ MODE MAINTENANCE
 Aucun capteur d'air n'est branché en phase 0 : le firmware doit le remarquer. Attendre 2 à 3 minutes après un démarrage, sans rien toucher :
 
 - la liaison série écrit `DEFAUT capteur air` ;
-- la LED d'état s'allume.
+- la LED d'état s'allume, si elle est câblée ;
+- sans LED, un multimètre en voltmètre continu entre **GPIO 2** (pointe rouge) et **GND** (pointe noire) lit environ 0 V avant le défaut et environ 3,3 V après.
 
 C'est la protection qui, à partir de la phase 1, coupera le chauffage et la pompe si le capteur se tait plus de 2 minutes.
 
 ## Fin de la phase 0
 
-La phase est terminée quand les cinq étapes donnent ce qu'elles annoncent. Laisser la LED d'état en place : elle sert à toutes les phases suivantes. La suite est la [notice de la phase 1](../phase-1/README.md).
+La phase est terminée quand les étapes 2 à 5 donnent ce qu'elles annoncent, et l'étape 1 si la LED est câblée. Laisser la LED d'état en place : elle sert à toutes les phases suivantes ; sans elle, la câbler avant de commencer la phase 1. La suite est la [notice de la phase 1](../phase-1/README.md).

@@ -43,3 +43,9 @@ Chaque phase se livre de sorte qu'une autre personne puisse refaire le montage s
 5. **Le workflow de publication** réagit au tag : il refait les contrôles, construit l'image fusionnée du firmware et le PDF de la notice, et crée la version GitHub avec ces deux fichiers.
 
 Le tag est le seul repère d'une personne qui reprend le projet : la notice qu'elle lit et le firmware qu'elle téléverse viennent du même commit.
+
+### Rédiger une notice
+
+**Toute valeur de résistance s'écrit avec son code couleur entre parenthèses**, dans la notice comme dans son schéma WireViz : « 330 Ω (orange, orange, marron, or) ». Quand le kit fourni risque de contenir des résistances à 5 anneaux (1 %, corps souvent bleu), la variante s'ajoute : « ou orange, orange, noir, noir, marron sur une résistance à 5 anneaux ». Qui monte trie ses résistances à l'œil, dans un sachet mélangé ; une valeur seule l'oblige à décoder les anneaux ou à sortir le multimètre, et une erreur d'un facteur dix — 330 Ω pour 3,3 kΩ — ne se voit qu'une fois le montage sous tension.
+
+**Un élément facultatif le dit**, avec ce qui le remplace pour vérifier l'étape, et la phase à partir de laquelle il devient nécessaire.
