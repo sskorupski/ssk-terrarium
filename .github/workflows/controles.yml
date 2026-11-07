@@ -1,0 +1,39 @@
+# Checks run on every pull request and on main: format, native tests, ESP32 build.
+# Public repository: GitHub-hosted runners only, so a fork's pull request never
+# runs on the owner's machine.
+name: Contrôles
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  controles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+      - name: Install tools
+        run: pip install -r requirements-ci.txt
+      - name: Format
+        run: clang-format --dry-run --Werror src/*.cpp lib/*/*.h lib/*/*.cpp include/*.h test/*/*.cpp
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.platformio
+          key: platformio-${{ hashFiles('platformio.ini', 'requirements-ci.txt') }}
+      - name: Native tests
+        run: pio test -e native
+      - name: ESP32 build
+        run: pio run -e esp32dev

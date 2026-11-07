@@ -1,0 +1,3 @@
+# Tools used by the CI, pinned (INV-7). Dependabot proposes their updates.
+platformio==6.2.0
+clang-format==23.1.2

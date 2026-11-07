@@ -1,0 +1,20 @@
+# Dependabot does not know PlatformIO: platformio.ini is reviewed by hand
+# (docs/developpement.md). It watches the CI tools and the actions.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # No peer constraint between platformio and clang-format: grouped only so
+      # that minor and patch bumps arrive as one pull request.
+      outils-ci:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        update-types: [minor, patch]

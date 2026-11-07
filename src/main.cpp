@@ -1,0 +1,235 @@
+// ssk-terrarium firmware entry point.
+//
+// The control path (sensors -> regulator -> outputs) runs entirely on the ESP32
+// and never waits for the network. MQTT, web and alerts are supervision only.
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <esp_idf_version.h>
+#include <esp_task_wdt.h>
+
+#include <cmath>
+
+#include "air_sensor.h"
+#include "alerts.h"
+#include "config.h"
+#include "hysteresis_regulator.h"
+#include "mode_machine.h"
+#include "mqtt_link.h"
+#include "outputs.h"
+#include "sensor_watch.h"
+#include "serial_command.h"
+#include "settings_store.h"
+#include "substrate_sensor.h"
+#include "web_ui.h"
+
+namespace cfg = terrarium::config;
+using terrarium::control::HeatingPolicy;
+using terrarium::control::HysteresisRegulator;
+using terrarium::control::Mode;
+using terrarium::control::ModeMachine;
+using terrarium::control::SensorHealth;
+using terrarium::control::SensorWatch;
+
+namespace {
+
+// Mode at power-up when NVS holds no valid one (RG-mode-au-demarrage).
+constexpr Mode kFallbackBootMode = Mode::kMaintenance;
+
+// Longest serial command line, terminator included.
+constexpr size_t kSerialLineSize = 32;
+
+// All objects are static: nothing is allocated once loop() runs.
+terrarium::outputs::Outputs outputs({cfg::kPinHeaterRelay, cfg::kPinLightRelay, cfg::kPinMistPump,
+                                     cfg::kPinFanRelay, cfg::kOutputOffLevel});
+terrarium::sensors::AirSensor airSensor;
+terrarium::sensors::SubstrateSensor substrateSensor(cfg::kPinOneWire);
+terrarium::storage::SettingsStore settingsStore;
+terrarium::mqtt::MqttLink mqttLink;
+terrarium::web::WebUi webUi;
+terrarium::alerts::Notifier notifier;
+
+ModeMachine modeMachine(kFallbackBootMode);
+SensorWatch airWatch(cfg::kSensorSilentMaxMs);
+HysteresisRegulator activeHeating =
+    HysteresisRegulator::aroundSetpoint(cfg::kSetpointC, cfg::kHeatHysteresisC);
+HysteresisRegulator frostHeating(cfg::kFrostHeatOnBelowC, cfg::kFrostHeatOffAtC);
+
+uint32_t lastSensorReadMs = 0;
+bool firstReadDone = false;
+
+char serialLine[kSerialLineSize];
+size_t serialLineLength = 0;
+bool serialLineOverflow = false;
+
+void startWatchdog() {
+#if ESP_IDF_VERSION_MAJOR >= 5
+  // Arduino core 3.x already starts the task watchdog: reconfigure it.
+  const esp_task_wdt_config_t config = {
+      .timeout_ms = cfg::kWatchdogTimeoutMs,
+      .idle_core_mask = 0,
+      .trigger_panic = true,
+  };
+  esp_task_wdt_reconfigure(&config);
+#else
+  esp_task_wdt_init(cfg::kWatchdogTimeoutMs / 1000, true);
+#endif
+  esp_task_wdt_add(nullptr);  // Watch the loop task.
+}
+
+// Heater state for one regulator, given the air sensor health
+// (RG-capteur-en-defaut): regulate on a valid reading, keep the current state
+// while the sensor is briefly silent, switch off once it is in fault.
+bool heaterFrom(HysteresisRegulator& regulator, SensorHealth health, float temperatureC) {
+  switch (health) {
+    case SensorHealth::kOk:
+      return regulator.update(temperatureC, true);
+    case SensorHealth::kHolding:
+      return regulator.isOn();
+    case SensorHealth::kFault:
+      break;
+  }
+  regulator.reset();
+  return false;
+}
+
+// One regulation step. Misting, light and fan stay off in phase 1
+// (RG-sorties-par-mode); an air sensor in fault switches heating off.
+void regulate(const terrarium::sensors::AirReading& air, uint32_t nowMs) {
+  const SensorHealth previous = airWatch.health();
+  const SensorHealth health = airWatch.update(nowMs, air.valid && !std::isnan(air.temperatureC));
+  if (health != previous && (health == SensorHealth::kFault || previous == SensorHealth::kFault)) {
+    Serial.println(health == SensorHealth::kFault ? "DEFAUT capteur air" : "REPRISE capteur air");
+  }
+  digitalWrite(cfg::kPinStatusLed, health == SensorHealth::kFault ? HIGH : LOW);
+
+  const terrarium::control::ModePolicy policy = modeMachine.policy();
+  terrarium::outputs::OutputState next{false, false, false, false};
+
+  switch (policy.heating) {
+    case HeatingPolicy::kSetpoint:
+      frostHeating.reset();
+      next.heater = heaterFrom(activeHeating, health, air.temperatureC);
+      break;
+    case HeatingPolicy::kFrostProtection:
+      activeHeating.reset();
+      next.heater = heaterFrom(frostHeating, health, air.temperatureC);
+      break;
+    case HeatingPolicy::kOff:
+      activeHeating.reset();
+      frostHeating.reset();
+      break;
+  }
+
+  // TODO(phase 1): continuous-heat cap (kHeatContinuousMaxMs); how heating
+  // resumes after the cap is still open in the cadrage.
+  // TODO(phase 2): light from the NTP time when policy.lightAllowed.
+  // TODO(phase 2): periodic fan cycles in ACTIF (kFanCyclePeriodMs).
+  // TODO(phase 4): misting pulses when policy.mistAllowed and air.valid.
+  outputs.apply(next);
+}
+
+// Restores the last saved mode, or stays in MAINTENANCE (RG-mode-au-demarrage).
+void restoreMode() {
+  uint8_t stored = 0;
+  Mode mode = kFallbackBootMode;
+  if (settingsStore.loadMode(stored) && terrarium::control::modeFromStored(stored, mode)) {
+    modeMachine.request(mode);
+  }
+  Serial.print("MODE ");
+  Serial.println(terrarium::control::toString(modeMachine.mode()));
+}
+
+void handleSerialLine(const char* line) {
+  Mode target = modeMachine.mode();
+  if (!terrarium::control::parseModeCommand(line, target)) {
+    Serial.println("ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE)");
+    return;
+  }
+  if (modeMachine.request(target) &&
+      !settingsStore.saveMode(terrarium::control::modeToStored(target))) {
+    Serial.println("ERREUR mode non enregistre");
+  }
+  Serial.print("MODE ");
+  Serial.println(terrarium::control::toString(modeMachine.mode()));
+}
+
+// Reads the serial link without blocking, one line at a time. Over-long
+// lines are dropped whole.
+void pollSerial() {
+  while (Serial.available() > 0) {
+    const char c = static_cast<char>(Serial.read());
+    if (c != '\n') {
+      if (serialLineLength + 1 < kSerialLineSize) {
+        serialLine[serialLineLength++] = c;
+      } else {
+        serialLineOverflow = true;
+      }
+      continue;
+    }
+    serialLine[serialLineLength] = '\0';
+    if (serialLineOverflow) {
+      Serial.println("ERREUR ligne trop longue");
+    } else if (serialLineLength > 0) {
+      handleSerialLine(serialLine);
+    }
+    serialLineLength = 0;
+    serialLineOverflow = false;
+  }
+}
+
+}  // namespace
+
+void setup() {
+  // SAFETY FIRST: drive every power output (pump GPIO 25, heater GPIO 26,
+  // light GPIO 27, fan GPIO 33) to its off level before anything else runs.
+  // If any later initialisation hangs, crashes or reboots the board, nothing
+  // is powered. Between reset and this line the pins float: the relay module
+  // must be wired so that a floating input leaves its relay off (cadrage,
+  // relay safeguards).
+  pinMode(cfg::kPinFanRelay, OUTPUT);
+  digitalWrite(cfg::kPinFanRelay, cfg::kOutputOffLevel);
+  pinMode(cfg::kPinMistPump, OUTPUT);
+  digitalWrite(cfg::kPinMistPump, cfg::kOutputOffLevel);
+  pinMode(cfg::kPinHeaterRelay, OUTPUT);
+  digitalWrite(cfg::kPinHeaterRelay, cfg::kOutputOffLevel);
+  pinMode(cfg::kPinLightRelay, OUTPUT);
+  digitalWrite(cfg::kPinLightRelay, cfg::kOutputOffLevel);
+
+  outputs.begin();
+  pinMode(cfg::kPinStatusLed, OUTPUT);
+  digitalWrite(cfg::kPinStatusLed, LOW);
+  Serial.begin(115200);
+
+  startWatchdog();
+
+  Wire.begin(cfg::kPinI2cSda, cfg::kPinI2cScl);
+  airSensor.begin();
+  substrateSensor.begin();
+
+  restoreMode();
+  terrarium::storage::Settings settings{};
+  settingsStore.load(settings);  // TODO(phase 2): apply the loaded settings.
+
+  // Supervision: started last, and none of it is awaited.
+  webUi.begin();
+  mqttLink.begin();
+  notifier.begin();
+}
+
+void loop() {
+  esp_task_wdt_reset();
+
+  const uint32_t nowMs = millis();
+  if (!firstReadDone || nowMs - lastSensorReadMs >= cfg::kSensorPeriodMs) {
+    firstReadDone = true;
+    lastSensorReadMs = nowMs;
+    regulate(airSensor.read(), nowMs);
+    substrateSensor.read();
+  }
+
+  pollSerial();
+  mqttLink.loop();
+  notifier.loop();
+  delay(10);
+}
