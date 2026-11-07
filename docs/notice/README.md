@@ -7,7 +7,7 @@ Le régulateur se construit phase par phase. Chaque phase ajoute du code et des 
 | Phase | Ce qu'elle apporte | Version | Notice |
 | --- | --- | --- | --- |
 | 0 | La carte ESP32 seule, programmée, et sa LED d'état | `phase-0` | [phase-0](phase-0/README.md) |
-| 1 | Capteurs, chauffage, hors-gel et protections : le prototype d'hiver | `phase-1` | [phase-1](phase-1/README.md) (en préparation) |
+| 1 | Capteurs, chauffage, hors-gel et protections : le prototype d'hiver | `phase-1` | [phase-1](phase-1/README.md) (en validation sur le montage) |
 | 2 | Éclairage à l'heure, ventilation, page web locale | `phase-2` | à venir |
 | 3 | Supervision à distance : MQTT, alertes, mise à jour par le réseau | `phase-3` | à venir |
 | 4 | Brumisation automatique | `phase-4` | à venir |
@@ -21,7 +21,7 @@ Chaque phase terminée porte un tag Git, `phase-N`. Un correctif qui ne change p
 
 Chaque tag a sa page sur [Releases](https://github.com/sskorupski/ssk-terrarium/releases), avec deux fichiers :
 
-- `ssk-terrarium-phase-N.bin` : le firmware prêt à téléverser, en une seule image à l'adresse `0x0` ;
+- `ssk-terrarium-phase-N.bin` (ou `phase-N.1`…) : le firmware prêt à téléverser, en une seule image à l'adresse `0x0` ;
 - `notice-phase-N.pdf` : la notice, schémas compris, à imprimer pour l'atelier.
 
 ## Sécurité, à chaque phase

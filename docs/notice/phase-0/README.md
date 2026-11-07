@@ -13,7 +13,7 @@ Durée : 30 minutes environ.
 | LED d'état | LED 3 mm, résistance 330 Ω (orange, orange, marron, or — ou orange, orange, noir, noir, marron sur une résistance à 5 anneaux), 2 fils Dupont mâles. Facultative en phase 0, nécessaire à partir de la phase 1 |
 | Multimètre | Facultatif : remplace la LED pour vérifier l'étape 5 |
 | Ordinateur | Avec le navigateur Chrome ou Edge, ou PlatformIO pour qui compile lui-même |
-| Firmware | `ssk-terrarium-phase-0.bin`, sur la page de la version `phase-0` |
+| Firmware | Le fichier `.bin` de la dernière version `phase-0` (`phase-0`, `phase-0.1`…), sur sa page [Releases](https://github.com/sskorupski/ssk-terrarium/releases) |
 
 ## Étape 1 — Câbler la LED d'état (facultative)
 
@@ -36,7 +36,7 @@ La carte n'a pas de LED sur GPIO 2 : c'est celle-ci qui signalera un défaut.
 1. Brancher la carte à l'ordinateur par le câble USB-C.
 2. Ouvrir [l'outil de flash d'Espressif](https://espressif.github.io/esptool-js/) dans Chrome ou Edge.
 3. Choisir 115 200 bauds, cliquer **Connect** et choisir le port de la carte (`USB Serial`, `CH340` ou `wchusbserial`).
-4. Dans **Flash Address**, saisir `0x0` (et non la valeur proposée) et choisir le fichier `ssk-terrarium-phase-0.bin`.
+4. Dans **Flash Address**, saisir `0x0` (et non la valeur proposée) et choisir le fichier `.bin` téléchargé.
 5. Cliquer **Program** et attendre la fin, puis **Disconnect**.
 
 **Depuis les sources**, pour qui a PlatformIO :
