@@ -20,7 +20,9 @@ bool SettingsStore::save(const Settings& /*settings*/) { return false; }
 
 bool SettingsStore::loadMode(uint8_t& out) {
   Preferences preferences;
-  if (!preferences.begin(kNamespace, /*readOnly=*/true)) return false;
+  // Read-write so that a first boot creates the namespace instead of logging
+  // "nvs_open failed: NOT_FOUND"; the caller reports the missing mode itself.
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
   const bool found = preferences.isKey(kModeKey);
   if (found) out = preferences.getUChar(kModeKey);
   preferences.end();

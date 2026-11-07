@@ -28,7 +28,7 @@ pio device monitor                  # liaison série, 115 200 bauds
 clang-format -i src/*.cpp lib/*/*.{h,cpp} include/*.h test/*/*.cpp
 ```
 
-Commandes de la liaison série : `MODE ACTIF`, `MODE HIBERNATION`, `MODE MAINTENANCE`. La carte répond `MODE <mode>`. Elle écrit aussi, toutes les 30 s, une ligne `MESURE air=19.2C hr=84% substrat=20.5C chauffage=1 mode=ACTIF` (`--` pour une mesure invalide), et à chaque changement d'état : `ABSENT capteur air` au démarrage, `DEFAUT capteur air` / `REPRISE capteur air`, `PAUSE chauffage apres 2 h continues` / `REPRISE chauffage`. La LED d'état est allumée tant qu'un défaut capteur ou une pause de chauffe dure.
+Commandes de la liaison série : `MODE ACTIF`, `MODE HIBERNATION`, `MODE MAINTENANCE`. La carte répond `MODE <mode>`. Elle écrit aussi, toutes les 30 s, une ligne `MESURE air=19.2C hr=84% substrat=20.5C chauffage=1 mode=ACTIF` (`--` pour une mesure invalide), et à chaque changement d'état : `INFO aucun mode enregistre, demarrage en MAINTENANCE` au démarrage tant qu'aucun mode n'a été enregistré, `ABSENT capteur air` au démarrage, `DEFAUT capteur air` / `REPRISE capteur air`, `PAUSE chauffage apres 2 h continues` / `REPRISE chauffage`. La LED d'état est allumée tant qu'un défaut capteur ou une pause de chauffe dure.
 
 ## Outils et versions
 

@@ -165,6 +165,8 @@ void restoreMode() {
   Mode mode = kFallbackBootMode;
   if (settingsStore.loadMode(stored) && terrarium::control::modeFromStored(stored, mode)) {
     modeMachine.request(mode);
+  } else {
+    Serial.println("INFO aucun mode enregistre, demarrage en MAINTENANCE");
   }
   Serial.print("MODE ");
   Serial.println(terrarium::control::toString(modeMachine.mode()));
