@@ -31,4 +31,15 @@ La page web locale vise WCAG 2.2 AA : HTML sémantique d'abord, ARIA seulement p
 
 - Une branche par sujet, fusionnée dans `main` par une demande de fusion dont la CI est verte ; la branche est rebasée sur `main` et la CI repasse avant la fusion.
 - Une phase se termine sur la carte : téléversement, essais sans charge, puis avec charge sous surveillance.
-- Le dépôt ne publie pas de versions GitHub : le firmware se téléverse depuis `main`.
+
+### Livrer une phase
+
+Chaque phase se livre de sorte qu'une autre personne puisse refaire le montage seule, avec la notice et sans l'historique des discussions.
+
+1. **La notice s'écrit avec le code**, dans `docs/notice/phase-N/README.md`, dans les mêmes demandes de fusion : ce qu'il faut, les étapes dans l'ordre où on les fait, et pour chacune ce qu'on doit observer. Une étape sans résultat observable n'est pas vérifiable par qui la suit.
+2. **Chaque branchement a son schéma WireViz** : `docs/notice/phase-N/<sujet>.yml`, et `outils/schemas.sh` en produit le `.gv` et le `.svg`, commités tous les trois. La CI régénère les `.gv` et refuse une demande de fusion dont le schéma ne suit plus sa source.
+3. **La phase se valide en suivant sa propre notice**, sur le vrai montage, de la première étape à la dernière ; ce qui a été mesuré (niveau de déclenchement, tensions) se reporte dans le cadrage.
+4. **Le tag `phase-N` se pose sur `main`** une fois la notice validée. Un correctif qui ne change pas le montage prend `phase-N.1`, `phase-N.2`… ; un changement de montage attend la phase suivante.
+5. **Le workflow de publication** réagit au tag : il refait les contrôles, construit l'image fusionnée du firmware et le PDF de la notice, et crée la version GitHub avec ces deux fichiers.
+
+Le tag est le seul repère d'une personne qui reprend le projet : la notice qu'elle lit et le firmware qu'elle téléverse viennent du même commit.

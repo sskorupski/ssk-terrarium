@@ -1,0 +1,5 @@
+# Tools that build the step-by-step notices, pinned (INV-7). WireViz also
+# needs Graphviz, and WeasyPrint needs Pango: both come from the system.
+wireviz==0.4.1
+weasyprint==70.0
+pypandoc_binary==1.17

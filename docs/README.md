@@ -8,4 +8,6 @@ Ordre de lecture pour qui arrive sur le projet :
 4. [clean-code.md](clean-code.md) : lisibilité et ce que l'outillage impose.
 5. [conventions.md](conventions.md) : nommage, commentaires, commits.
 
+Pour monter le régulateur plutôt que le développer : [notice/README.md](notice/README.md), une notice pas à pas par phase.
+
 Le pourquoi fonctionnel (modes, consignes, protections, matériel) est dans le cadrage [ssk-terrarium-cadrage#2026-001](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-001) : le code y renvoie par le nom des règles, `RG-…`.

@@ -37,3 +37,31 @@ jobs:
         run: pio test -e native
       - name: ESP32 build
         run: pio run -e esp32dev
+
+  notices:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-notice.txt
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq graphviz libpango-1.0-0 libpangoft2-1.0-0
+          pip install -r requirements-notice.txt
+      - name: Diagrams follow their WireViz sources
+        run: |
+          outils/schemas.sh
+          git add --intent-to-add docs/notice
+          git diff --exit-code -- 'docs/notice/**.gv' || {
+            echo "::error::Un schéma ne suit plus sa source : lancer outils/schemas.sh et commiter."
+            exit 1
+          }
+      - name: Notices build as PDF
+        run: |
+          for phase in docs/notice/phase-*/; do
+            python outils/notice_pdf.py "$phase" "$RUNNER_TEMP/$(basename "$phase").pdf"
+          done

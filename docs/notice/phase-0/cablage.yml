@@ -1,0 +1,34 @@
+# Phase 0 wiring: the status LED alone (RG-brochage, BOM line 6).
+# Source of cablage.svg: regenerate with outils/schemas.sh after any change.
+metadata:
+  title: Phase 0 — LED d'état
+
+connectors:
+  ESP32:
+    type: Carte Keyestudio KS5016
+    subtype: connecteurs femelles
+    pinlabels: [GPIO 2, GND]
+  LED:
+    type: LED 3 mm
+    pinlabels: [Anode (patte longue), Cathode (patte courte)]
+
+cables:
+  # The resistor sits in series on the GPIO 2 wire: drawn as that wire.
+  R1:
+    wirecount: 1
+    colors: [YE]
+    category: bundle
+    type: Fil Dupont mâle + résistance 330 Ω en série
+  W2:
+    wirecount: 1
+    colors: [BK]
+    category: bundle
+    type: Fil Dupont mâle
+
+connections:
+  - - ESP32: [1]
+    - R1: [1]
+    - LED: [1]
+  - - ESP32: [2]
+    - W2: [1]
+    - LED: [2]
