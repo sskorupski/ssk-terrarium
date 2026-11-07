@@ -23,6 +23,17 @@ Le vocabulaire du cœur est celui du domaine — mode, consigne, hors-gel, défa
 - Aucune allocation dynamique une fois `loop()` lancé : objets statiques, tampons de taille fixe. Une fragmentation du tas sur des mois de fonctionnement ne se diagnostique pas.
 - Le chien de garde (10 s) redémarre une carte figée ; INV-1 garantit qu'elle repart sorties coupées.
 
+## Messages de la liaison série
+
+**Tout message que la carte écrit se comprend sans connaître le code** : il dit, en français et avec les mots de la notice, ce qui se passe et ce que la carte fait en conséquence. Qui suit la notice n'a que ces lignes pour savoir si son montage va bien ; un message obscur l'arrête, et un message qui ressemble à une panne lui fait défaire un montage correct.
+
+- Un mot-clé en majuscules ouvre la ligne, puis vient la phrase : `MODE`, `MESURE`, `INFO`, `ABSENT`, `DEFAUT`, `REPRISE`, `PAUSE`, `ERREUR`. Le mot-clé se filtre, la phrase se lit.
+- Des titres de section `=== … ===` découpent le journal : le premier, avec la version du firmware, sépare ses lignes des messages de démarrage de la puce, qu'il ne contrôle pas ; un autre dit quand l'initialisation est finie. Qui lit le journal sait où regarder, et quelle notice suit la carte.
+- Une situation normale ne s'affiche jamais comme une erreur. Le premier démarrage écrit `INFO aucun mode enregistre, demarrage en MAINTENANCE`, et non le `nvs_open failed: NOT_FOUND` de la bibliothèque `Preferences` : un message de bibliothèque ou du cœur Arduino qui sort dans un cas normal s'évite à la source, et le firmware dit lui-même ce qu'il en est.
+- Un `ERREUR` dit ce qui était attendu : `ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE)`.
+- Les textes s'écrivent sans accents, pour qu'un terminal mal réglé les affiche intacts.
+- Chaque message figure dans la liste des sorties de `docs/developpement.md`, et dans la notice dès qu'une étape demande de l'observer.
+
 ## Interface web (à partir de la phase 2)
 
 La page web locale vise WCAG 2.2 AA : HTML sémantique d'abord, ARIA seulement pour un composant que HTML n'offre pas, avec le comportement clavier que décrit l'[APG](https://www.w3.org/WAI/ARIA/apg/). La table des ressources de la WAI à ouvrir selon le geste sera ajoutée ici avec la première vue.
@@ -43,3 +54,9 @@ Chaque phase se livre de sorte qu'une autre personne puisse refaire le montage s
 5. **Le workflow de publication** réagit au tag : il refait les contrôles, construit l'image fusionnée du firmware et le PDF de la notice, et crée la version GitHub avec ces deux fichiers.
 
 Le tag est le seul repère d'une personne qui reprend le projet : la notice qu'elle lit et le firmware qu'elle téléverse viennent du même commit.
+
+### Rédiger une notice
+
+**Toute valeur de résistance s'écrit avec son code couleur entre parenthèses**, dans la notice comme dans son schéma WireViz : « 330 Ω (orange, orange, marron, or) ». Quand le kit fourni risque de contenir des résistances à 5 anneaux (1 %, corps souvent bleu), la variante s'ajoute : « ou orange, orange, noir, noir, marron sur une résistance à 5 anneaux ». Qui monte trie ses résistances à l'œil, dans un sachet mélangé ; une valeur seule l'oblige à décoder les anneaux ou à sortir le multimètre, et une erreur d'un facteur dix — 330 Ω pour 3,3 kΩ — ne se voit qu'une fois le montage sous tension.
+
+**Un élément facultatif le dit**, avec ce qui le remplace pour vérifier l'étape, et la phase à partir de laquelle il devient nécessaire.
