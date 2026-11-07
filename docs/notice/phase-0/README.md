@@ -50,8 +50,12 @@ Si aucun port n'apparaît : essayer un autre câble USB-C ; sur un macOS ancien 
 
 ## Étape 3 — Lire la liaison série
 
-1. Ouvrir un moniteur série à **115 200 bauds** : la console de l'outil d'Espressif (bouton **Console**), ou `pio device monitor`.
-2. Appuyer sur le bouton **RESET** (ou **EN**) de la carte.
+Le moniteur série affiche ce qu'écrit la carte et lui envoie ce qu'on tape. La console de l'outil d'Espressif ne fait que lire : elle ne sert pas ici.
+
+1. Fermer l'outil d'Espressif s'il est encore connecté : un seul programme à la fois peut ouvrir le port de la carte.
+2. Ouvrir le [terminal série de Chrome Labs](https://googlechromelabs.github.io/serial-terminal/) dans Chrome ou Edge — ou `pio device monitor` pour qui a PlatformIO.
+3. Choisir **115200** bauds, cocher **Local echo** (pour voir ce qu'on tape), cliquer **Connect** et choisir le port de la carte.
+4. Appuyer sur le bouton **RESET** (ou **EN**) de la carte.
 
 La carte écrit, entre autres lignes de démarrage :
 
@@ -63,15 +67,15 @@ Au tout premier démarrage, elle n'a aucun mode enregistré : elle démarre en `
 
 ## Étape 4 — Changer de mode
 
-Le moniteur est la console ouverte à l'étape 3, la zone noire où s'affichent les messages de la carte : ce qu'on y tape part directement vers la carte.
+Le moniteur est le terminal ouvert à l'étape 3 : ce qu'on y tape part directement vers la carte.
 
-1. Cliquer dans la zone noire de la console.
-2. Taper `MODE HIBERNATION`, en majuscules, avec une espace entre les deux mots, puis appuyer sur **Entrée**. La console du navigateur n'affiche pas les lettres tapées : seule la réponse de la carte apparaît.
+1. Cliquer dans la zone du terminal où s'affichent les messages de la carte.
+2. Taper `MODE HIBERNATION`, en majuscules, avec une espace entre les deux mots, puis appuyer sur **Entrée**. Sans **Local echo**, les lettres tapées ne s'affichent pas : seule la réponse de la carte apparaît.
 3. La carte répond `MODE HIBERNATION`.
 4. Appuyer sur **RESET** : la carte redémarre et écrit de nouveau `MODE HIBERNATION`. Le mode survit à une coupure, ce qui garde le hors-gel actif l'hiver après une panne de courant.
 5. Taper `MODE MAINTENANCE` puis **Entrée** pour remettre la carte en maintenance ; elle répond `MODE MAINTENANCE`.
 
-Une commande mal tapée (`mode actif` en minuscules par exemple) donne `ERREUR commande inconnue` et ne change rien. Comme rien ne s'affiche, la touche d'effacement n'aide pas : en cas de faute de frappe, appuyer sur **Entrée** et retaper la commande.
+Une commande mal tapée (`mode actif` en minuscules par exemple) donne `ERREUR commande inconnue` et ne change rien. La touche d'effacement n'est pas comprise par la carte : en cas de faute de frappe, appuyer sur **Entrée** et retaper la commande.
 
 ## Étape 5 — Observer le défaut capteur
 
