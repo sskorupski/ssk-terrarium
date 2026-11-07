@@ -19,6 +19,8 @@ jobs:
       TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0  # git describe needs the tags for the boot banner.
       - name: Phase of the tag
         run: |
           phase="${TAG%%.*}"

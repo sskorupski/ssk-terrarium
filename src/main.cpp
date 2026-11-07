@@ -22,6 +22,11 @@
 #include "substrate_sensor.h"
 #include "web_ui.h"
 
+// Set by outils/version_firmware.py from `git describe`.
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "inconnue"
+#endif
+
 namespace cfg = terrarium::config;
 using terrarium::control::HeatGuard;
 using terrarium::control::HeatingPolicy;
@@ -237,6 +242,9 @@ void setup() {
   pinMode(cfg::kPinStatusLed, OUTPUT);
   digitalWrite(cfg::kPinStatusLed, LOW);
   Serial.begin(115200);
+  // Separates the firmware's own lines from the chip's boot messages above.
+  Serial.println();
+  Serial.println("=== ssk-terrarium " FIRMWARE_VERSION " : demarrage ===");
 
   startWatchdog();
 
@@ -252,6 +260,8 @@ void setup() {
   webUi.begin();
   mqttLink.begin();
   notifier.begin();
+
+  Serial.println("=== pret : regulation en cours ===");
 }
 
 void loop() {
