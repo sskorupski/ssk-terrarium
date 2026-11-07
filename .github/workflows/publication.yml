@@ -1,0 +1,51 @@
+# Publishes a phase when its tag is pushed: phase-N, or phase-N.M for a fix
+# that keeps the wiring. The release carries the merged firmware image and the
+# notice of the phase as a PDF (docs/pratiques.md, "Livrer une phase").
+name: Publication
+
+on:
+  push:
+    tags: ["phase-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publication:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Phase of the tag
+        run: |
+          phase="${TAG%%.*}"
+          [ -f "docs/notice/$phase/README.md" ] || {
+            echo "::error::Aucune notice docs/notice/$phase pour le tag $TAG."
+            exit 1
+          }
+          echo "PHASE=$phase" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq graphviz libpango-1.0-0 libpangoft2-1.0-0
+          pip install -r requirements-ci.txt -r requirements-notice.txt
+      - name: Native tests
+        run: pio test -e native
+      - name: Firmware image
+        run: outils/firmware-fusionne.sh "ssk-terrarium-$TAG.bin"
+      - name: Notice
+        run: python outils/notice_pdf.py "docs/notice/$PHASE" "notice-$TAG.pdf"
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" "ssk-terrarium-$TAG.bin" "notice-$TAG.pdf" \
+            --title "$TAG" \
+            --notes "Notice : [docs/notice/$PHASE](https://github.com/${{ github.repository }}/blob/$TAG/docs/notice/$PHASE/README.md). Téléverser \`ssk-terrarium-$TAG.bin\` à l'adresse 0x0." \
+            --generate-notes

@@ -16,7 +16,7 @@ constexpr uint8_t kPinI2cSda = 21;  // SHT45 (Adafruit #6174, address 0x44).
 constexpr uint8_t kPinI2cScl = 22;
 constexpr uint8_t kPinOneWire = 4;  // DS18B20, 4.7 kOhm pull-up to 3.3 V.
 
-// Power outputs: channels of the 6-relay optocoupled module.
+// Power outputs: channels of the 4-relay optocoupled module (Kiwi KW-1613).
 constexpr uint8_t kPinHeaterRelay = 26;
 constexpr uint8_t kPinLightRelay = 27;
 constexpr uint8_t kPinMistPump = 25;

@@ -15,4 +15,5 @@ Ce fichier ne s'adresse qu'à un agent. Tout le reste est dans `docs/`.
 - Demander au propriétaire avant tout écart au brochage, aux bibliothèques prévues, ou à une règle de sécurité (INV-1 à INV-5).
 - Ne jamais committer sur `main` : une copie liée et une branche par sujet, depuis `origin/main`.
 - Ne jamais téléverser ni piloter une carte branchée sans que le propriétaire le demande : une sortie peut alimenter une charge 230 V.
-- Tenir `docs/` à jour dans la même demande de fusion que le code qui le contredit.
+- Tenir `docs/` à jour dans la même demande de fusion que le code qui le contredit ; un changement de branchement met à jour la notice de la phase et son schéma WireViz (`outils/schemas.sh`).
+- Ne jamais poser ni pousser un tag `phase-N` sans l'accord du propriétaire : il publie une version.

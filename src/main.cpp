@@ -154,12 +154,13 @@ void handleSerialLine(const char* line) {
   Serial.println(terrarium::control::toString(modeMachine.mode()));
 }
 
-// Reads the serial link without blocking, one line at a time. Over-long
-// lines are dropped whole.
+// Reads the serial link without blocking, one line at a time. A line ends
+// on LF or CR: browser consoles send CR alone on Enter. Over-long lines are
+// dropped whole.
 void pollSerial() {
   while (Serial.available() > 0) {
     const char c = static_cast<char>(Serial.read());
-    if (c != '\n') {
+    if (c != '\n' && c != '\r') {
       if (serialLineLength + 1 < kSerialLineSize) {
         serialLine[serialLineLength++] = c;
       } else {

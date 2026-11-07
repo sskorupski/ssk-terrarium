@@ -13,6 +13,8 @@ lib/web/           page web locale (phase 2)
 lib/mqtt/          publication MQTT (phase 3)
 lib/alerts/        alertes ntfy (phase 3)
 test/test_*/       un dossier par suite Unity, compilées pour l'environnement native
+docs/notice/       notices de montage pas à pas, une par phase, avec leurs schémas WireViz
+outils/            schémas, PDF des notices, image fusionnée du firmware
 ```
 
 ## Gestes courants
@@ -32,6 +34,18 @@ Commandes de la liaison série : `MODE ACTIF`, `MODE HIBERNATION`, `MODE MAINTEN
 
 - PlatformIO Core et clang-format : leurs versions sont épinglées dans `requirements-ci.txt`, que Dependabot fait monter. Pour s'y aligner : `pip install -r requirements-ci.txt` dans un environnement virtuel.
 - La plateforme `espressif32@7.1.3` apporte le cœur Arduino-ESP32 2.0.17 (ESP-IDF 4.4). `main.cpp` sait aussi armer le chien de garde d'un cœur 3.x (ESP-IDF 5), pour le jour où la plateforme montera.
+
+## Notices et publication
+
+```bash
+pip install -r requirements-notice.txt   # WireViz, pandoc, WeasyPrint (environnement virtuel)
+brew install graphviz pango              # dépendances système de WireViz et WeasyPrint
+outils/schemas.sh                        # régénère les schémas des notices
+python outils/notice_pdf.py docs/notice/phase-0 notice-phase-0.pdf
+outils/firmware-fusionne.sh ssk-terrarium-phase-0.bin
+```
+
+Le `.gv` d'un schéma ne dépend que de WireViz, alors que le `.svg` dépend aussi de la version de Graphviz : c'est pourquoi la CI compare les `.gv`, pas les `.svg`.
 
 ## Pièges
 

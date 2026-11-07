@@ -22,6 +22,10 @@ pio run -e esp32dev -t upload && pio device monitor
 
 Sur la liaison série (115 200 bauds), `MODE ACTIF`, `MODE HIBERNATION` ou `MODE MAINTENANCE` change de mode ; le mode est conservé à travers les coupures de courant.
 
+## Monter le régulateur
+
+Chaque phase a sa notice pas à pas, avec ses schémas de branchement, et une version taguée `phase-N` dont la page de [Releases](https://github.com/sskorupski/ssk-terrarium/releases) porte le firmware prêt à téléverser et la notice en PDF : voir [docs/notice/README.md](docs/notice/README.md).
+
 ## Documentation
 
 La documentation technique commence par [docs/README.md](docs/README.md).
