@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "config.h"
 #include "state_message.h"
 
 using terrarium::control::Mode;
@@ -9,7 +10,14 @@ using terrarium::control::TimeWindows;
 using terrarium::supervision::formatState;
 using terrarium::supervision::StateSnapshot;
 
+namespace cfg = terrarium::config;
+
 namespace {
+
+// The bounds the firmware uses, from config.h.
+constexpr terrarium::control::HeatSettingsBounds kBounds{
+    cfg::kSetpointMinC, cfg::kSetpointMaxC, cfg::kHeatHysteresisMinC, cfg::kHeatHysteresisMaxC,
+    cfg::kAlertTempHighC};
 
 StateSnapshot sample() {
   StateSnapshot s{};
@@ -28,6 +36,7 @@ StateSnapshot sample() {
   std::strcpy(s.timezone, "CET-1CEST,M3.5.0,M10.5.0/3");
   s.timeKnown = true;
   s.inWindow = false;
+  s.bounds = kBounds;
   return s;
 }
 
@@ -36,9 +45,10 @@ StateSnapshot sample() {
 void setUp() {}
 void tearDown() {}
 
-// RG-topics-mqtt: the state carries measures, outputs, mode, setpoint and uptime.
+// RG-topics-mqtt: the state carries measures, outputs, mode, setpoint, uptime,
+// and the bounds of the settings (RG-reglages-bornes).
 void test_formats_the_whole_state() {
-  char out[512];
+  char out[terrarium::supervision::kStateSize];
   TEST_ASSERT_GREATER_THAN(0, formatState(sample(), out, sizeof(out)));
   TEST_ASSERT_EQUAL_STRING(
       "{\"air\":{\"temperature\":19.2,\"humidite\":84},\"substrat\":{\"temperature\":20.5},"
@@ -46,7 +56,9 @@ void test_formats_the_whole_state() {
       "\"mode\":\"ACTIF\",\"consigne\":19.0,\"hysteresis\":0.5,\"defaut_capteur\":false,"
       "\"pause_chauffage\":false,\"uptime_s\":3600,\"version\":\"phase-1.1\","
       "\"plages\":[\"01:35-06:30\",\"14:05-17:05\"],\"fuseau\":\"CET-1CEST,M3.5.0,M10.5.0/3\","
-      "\"heure_connue\":true,\"en_plage\":false}",
+      "\"heure_connue\":true,\"en_plage\":false,"
+      "\"bornes\":{\"consigne\":[15.0,22.0],\"hysteresis\":[0.2,2.0],\"somme_max\":24.0,"
+      "\"plages_max\":4,\"fuseau_max\":47}}",
       out);
 }
 
@@ -58,23 +70,31 @@ void test_unknown_time_has_no_window_state() {
   char out[768];
   TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"plages\":[],"));
-  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"heure_connue\":false,\"en_plage\":null}"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"heure_connue\":false,\"en_plage\":null,\"bornes\":"));
 }
 
-// Four windows and the longest time zone still fit the MQTT buffer.
+// Four windows, the longest time zone, every measure and the bounds still fit
+// the state buffer, which the MQTT buffer holds with its topic (mqtt_link.cpp).
 void test_longest_state_fits() {
   StateSnapshot s = sample();
   s.mode = Mode::kHibernation;
+  s.heater = false;
   s.windows = TimeWindows{4, {{0, 60}, {120, 180}, {240, 300}, {1380, 1439}}};
-  std::memset(s.timezone, 'A', 46);
-  s.timezone[46] = '0';
-  s.timezone[47] = '\0';
+  std::memset(s.timezone, 'A', terrarium::control::kTimezoneMaxLength - 1);
+  s.timezone[terrarium::control::kTimezoneMaxLength - 1] = '0';
+  s.timezone[terrarium::control::kTimezoneMaxLength] = '\0';
   s.airTemperatureC = -10.5f;
+  s.airHumidityRhPercent = 100.0f;
   s.substrateTemperatureC = -10.5f;
+  s.setpointC = cfg::kSetpointMaxC;
+  s.hysteresisC = cfg::kHeatHysteresisMaxC;
   s.uptimeS = 4294967295UL;
   s.firmwareVersion = "phase-12.34-567-gabcdef0-dirty";
   char out[terrarium::supervision::kStateSize];
-  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
+  const size_t length = formatState(s, out, sizeof(out));
+  TEST_MESSAGE(out);
+  TEST_ASSERT_GREATER_THAN(0, length);
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"fuseau_max\":47}}"));
 }
 
 void test_invalid_readings_are_null() {

@@ -5,13 +5,15 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "heat_settings.h"
 #include "mode_machine.h"
 #include "posix_tz.h"
 #include "time_windows.h"
 
 namespace terrarium::supervision {
 
-// Largest state JSON: four windows and the longest time zone fit.
+// Largest state JSON: four windows, the longest time zone and the bounds fit
+// (593 bytes with a 30-character version, test_longest_state_fits).
 constexpr size_t kStateSize = 640;
 
 // What the regulation loop hands to the supervision task, every cycle.
@@ -36,6 +38,7 @@ struct StateSnapshot {
   char timezone[control::kTimezoneSize];  // POSIX TZ; replaced by "" if invalid.
   bool timeKnown;                         // NTP answered since boot.
   bool inWindow;                          // Meaningful only when timeKnown.
+  control::HeatSettingsBounds bounds;     // Compile-time bounds (RG-reglages-bornes).
 };
 
 // Writes the JSON into `out`. Returns its length, or 0 if it does not fit.
