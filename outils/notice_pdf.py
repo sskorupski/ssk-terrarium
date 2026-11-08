@@ -17,6 +17,8 @@ img { max-width: 100%; }
 code, pre { font-size: 9pt; }
 pre { background: #f3f3f3; padding: 6px 8px; white-space: pre-wrap; }
 table { border-collapse: collapse; } td, th { border: 1px solid #999; padding: 3px 6px; }
+tr { break-inside: avoid; }  /* A row never splits across pages. */
+td img { max-height: 80px; width: auto; }  /* Part illustrations stay thumbnails. */
 """
 
 
