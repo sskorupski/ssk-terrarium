@@ -28,4 +28,5 @@ Chaque tag a sa page sur [Releases](https://github.com/sskorupski/ssk-terrarium/
 
 - Rien ne se branche sous tension : on débranche le bloc 12 V et le cordon secteur avant de toucher un fil.
 - Le 230 V n'arrive qu'à la phase 1, et seulement après les vérifications au multimètre que sa notice décrit.
-- Le limiteur Exo Terra réglé à 24 °C reste en série des câbles chauffants, quelle que soit la phase.
+- Aucun élément sous 230 V n'entre dans le bac : les câbles chauffants restent à l'extérieur, contre les vitres et sous l'isolant.
+- Le limiteur matériel à 24 °C et le fusible du chauffage sont reportés après la phase 1 ([#9](https://github.com/sskorupski/ssk-terrarium/issues/9), [#10](https://github.com/sskorupski/ssk-terrarium/issues/10)) : tant qu'ils manquent, rien de matériel ne coupe le chauffage si le relais 1 reste collé.

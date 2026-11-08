@@ -1,6 +1,7 @@
 # Phase 1 wiring: 230 V heating circuit. Relay 1 switches the phase only;
-# neutral and earth go straight to the socket (step 9, RG-limiteur-materiel).
-# The Exo Terra limiter plugs into the socket. Source of secteur.svg:
+# neutral and earth go straight to the socket (step 9). No fuse and no
+# limiter in phase 1 (#9, #10): the power strip plugs into the socket.
+# Source of secteur.svg:
 # regenerate with outils/schemas.sh after any change.
 metadata:
   title: Phase 1 — Câblage 230 V du chauffage
@@ -9,16 +10,12 @@ connectors:
   CORDON:
     type: (N) Cordon secteur 3G 1 mm² avec fiche
     pinlabels: [Phase, Neutre, Terre]
-  FUSIBLE:
-    type: (P) Porte-fusible 5 × 20
-    subtype: fusible 1 A temporisé
-    pinlabels: [Entrée, Sortie]
   RELAIS1:
     type: (E) Relais 1 du module (chauffage)
     pinlabels: [COM, "NO", NC (libre)]
   SOCLE:
     type: (Q) Socle de prise femelle
-    subtype: reçoit le limiteur Exo Terra 24 °C
+    subtype: reçoit la multiprise (V)
     pinlabels: ["L", "N", Terre]
 
 cables:
@@ -34,23 +31,14 @@ cables:
     gauge: 1 mm2
     category: bundle
     type: Fil
-  W3:
-    wirecount: 1
-    colors: [BN]
-    gauge: 1 mm2
-    category: bundle
-    type: Fil
 
 connections:
   - - CORDON: [1]
     - W1: [1]
-    - FUSIBLE: [1]
+    - RELAIS1: [1]
   - - CORDON: [2, 3]
     - W1: [2, 3]
     - SOCLE: [2, 3]
-  - - FUSIBLE: [2]
-    - W2: [1]
-    - RELAIS1: [1]
   - - RELAIS1: [2]
-    - W3: [1]
+    - W2: [1]
     - SOCLE: [1]

@@ -7,7 +7,7 @@ Ces règles ne se négocient pas. Chacune se cite par son numéro, en revue, en 
 Chauffage, éclairage, pompe et ventilateur passent à l'état coupé avant toute autre opération de `setup()` (RG-sorties-coupees-au-demarrage), et une broche non pilotée laisse chaque relais ouvert (RG-relais-coupes-sans-commande).
 
 - **Ce qu'il protège** : un redémarrage, un plantage ou une initialisation bloquée n'allume rien.
-- **Sans lui** : un reset pendant que le chauffage chauffe le laisserait allumé, sans régulation, jusqu'au limiteur.
+- **Sans lui** : un reset pendant que le chauffage chauffe le laisserait allumé, sans régulation, indéfiniment.
 
 ## INV-2 — Un capteur d'air en défaut coupe le chauffage et la pompe
 
@@ -23,12 +23,14 @@ Mesure, décision et pilotage des sorties tournent sur l'ESP32 seul. La page web
 - **Ce qu'il protège** : une box qui redémarre ou un Wi-Fi absent ne changent rien au climat du terrarium.
 - **Sans lui** : un appel réseau bloquant suffit à figer la boucle, et le chien de garde à redémarrer la carte en boucle.
 
-## INV-4 — Le limiteur matériel à 24 °C reste en place
+## INV-4 — Aucun élément sous 230 V dans le bac
 
-Le thermostat Exo Terra, réglé à 24 °C, est en série des câbles chauffants, hors du firmware (RG-limiteur-materiel). Aucune évolution du code ne justifie de le retirer.
+Les câbles chauffants sont à l'extérieur, contre les vitres et sous l'isolant ; n'entrent dans le bac que les capteurs et des éléments en très basse tension (RG-230v-hors-du-bac).
 
-- **Ce qu'il protège** : les animaux, d'un relais collé ou d'un défaut du firmware.
-- **Sans lui** : la seule protection contre la surchauffe serait le code qu'elle doit justement rattraper.
+- **Ce qu'il protège** : ni l'eau du bac ni une main qui y travaille n'approchent le 230 V.
+- **Sans lui** : un câble abîmé ou une fuite de brumisation mettrait le 230 V au contact d'un bac humide.
+
+Le limiteur matériel à 24 °C que cet invariant imposait jusqu'ici est reporté après la phase 1, par décision du propriétaire : décision `06-protection-contre-la-surchauffe` du cadrage, [#9](https://github.com/sskorupski/ssk-terrarium/issues/9). Tant qu'il manque, rien de matériel ne coupe le chauffage si le relais 1 reste collé ou si le firmware se trompe : la seule protection contre la surchauffe est le code.
 
 ## INV-5 — Les limites de sécurité ne se règlent pas à l'exécution
 
