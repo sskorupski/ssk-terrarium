@@ -14,13 +14,13 @@
 #include "heat_guard.h"
 #include "hysteresis_regulator.h"
 #include "mode_machine.h"
-#include "mqtt_link.h"
 #include "outputs.h"
 #include "sensor_watch.h"
 #include "serial_command.h"
 #include "settings_store.h"
+#include "state_message.h"
 #include "substrate_sensor.h"
-#include "web_ui.h"
+#include "supervisor.h"
 
 // Set by outils/version_firmware.py from `git describe`.
 #ifndef FIRMWARE_VERSION
@@ -50,8 +50,7 @@ terrarium::outputs::Outputs outputs({cfg::kPinHeaterRelay, cfg::kPinLightRelay, 
 terrarium::sensors::AirSensor airSensor;
 terrarium::sensors::SubstrateSensor substrateSensor(cfg::kPinOneWire);
 terrarium::storage::SettingsStore settingsStore;
-terrarium::mqtt::MqttLink mqttLink;
-terrarium::web::WebUi webUi;
+terrarium::network::Supervisor supervisor(settingsStore);
 terrarium::alerts::Notifier notifier;
 
 ModeMachine modeMachine(kFallbackBootMode);
@@ -164,6 +163,31 @@ void reportMeasures(const terrarium::sensors::AirReading& air,
                 terrarium::control::toString(modeMachine.mode()));
 }
 
+// Hands the cycle's state to the supervision task, which publishes it when
+// the broker is reachable (RG-topics-mqtt). Never waits for the network.
+void publishState(const terrarium::sensors::AirReading& air,
+                  const terrarium::sensors::SubstrateReading& substrate, uint32_t nowMs) {
+  const terrarium::outputs::OutputState& out = outputs.state();
+  terrarium::supervision::StateSnapshot snapshot{};
+  snapshot.airValid = air.valid;
+  snapshot.airTemperatureC = air.temperatureC;
+  snapshot.airHumidityRhPercent = air.humidityRhPercent;
+  snapshot.substrateValid = substrate.valid;
+  snapshot.substrateTemperatureC = substrate.temperatureC;
+  snapshot.heater = out.heater;
+  snapshot.light = out.light;
+  snapshot.mistPump = out.mistPump;
+  snapshot.fan = out.fan;
+  snapshot.mode = modeMachine.mode();
+  snapshot.setpointC = cfg::kSetpointC;
+  snapshot.hysteresisC = cfg::kHeatHysteresisC;
+  snapshot.sensorFault = airWatch.health() == SensorHealth::kFault;
+  snapshot.heatPaused = heatGuard.paused();
+  snapshot.uptimeS = nowMs / 1000;
+  snapshot.firmwareVersion = FIRMWARE_VERSION;
+  supervisor.publish(snapshot);
+}
+
 // Restores the last saved mode, or stays in MAINTENANCE (RG-mode-au-demarrage).
 void restoreMode() {
   uint8_t stored = 0;
@@ -177,9 +201,15 @@ void restoreMode() {
 }
 
 void handleSerialLine(const char* line) {
+  if (terrarium::control::isWifiPortalCommand(line)) {
+    supervisor.requestPortal();
+    Serial.println("WIFI ouverture du reseau de configuration demandee");
+    return;
+  }
   Mode target = modeMachine.mode();
   if (!terrarium::control::parseModeCommand(line, target)) {
-    Serial.println("ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE)");
+    Serial.println(
+        "ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE, WIFI CONFIGURER)");
     return;
   }
   // Each reply differs from the command typed, so that a terminal echoing the
@@ -256,9 +286,8 @@ void setup() {
   terrarium::storage::Settings settings{};
   settingsStore.load(settings);  // TODO(phase 2): apply the loaded settings.
 
-  // Supervision: started last, and none of it is awaited.
-  webUi.begin();
-  mqttLink.begin();
+  // Supervision: started last, in its own task, and none of it is awaited.
+  supervisor.begin();
   notifier.begin();
 
   Serial.println("=== pret : regulation en cours ===");
@@ -273,11 +302,12 @@ void loop() {
     lastSensorReadMs = nowMs;
     const terrarium::sensors::AirReading air = airSensor.read();
     regulate(air, nowMs);
-    reportMeasures(air, substrateSensor.read());
+    const terrarium::sensors::SubstrateReading substrate = substrateSensor.read();
+    reportMeasures(air, substrate);
+    publishState(air, substrate, nowMs);
   }
 
   pollSerial();
-  mqttLink.loop();
   notifier.loop();
   delay(10);
 }
