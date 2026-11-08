@@ -1,0 +1,48 @@
+# Phase 1 wiring: SHT45 air sensor (I2C) and DS18B20 substrate probe (1-Wire)
+# (step 6, RG-brochage). Source of capteurs.svg: regenerate with
+# outils/schemas.sh after any change.
+metadata:
+  title: Phase 1 — Capteurs
+
+connectors:
+  KS5016:
+    type: Carte Keyestudio KS5016
+    pinlabels: [GPIO 21 (SDA), GPIO 22 (SCL), GPIO 4]
+  PLAQUE:
+    type: Mini plaque d'essai
+    subtype: lignes de l'étape 4
+    pinlabels: ["Ligne 3,3 V", Ligne GND]
+  SHT45:
+    type: Capteur d'air Adafruit SHT45
+    subtype: connecteur STEMMA QT
+    pinlabels: [GND, V+, SDA, SCL]
+  ADAPTATRICE:
+    type: Carte adaptatrice de la DS18B20
+    subtype: résistance de tirage de 4,7 kΩ intégrée
+    pinlabels: [GND (−), VCC (+), D]
+
+cables:
+  QT:
+    wirecount: 4
+    colors: [BK, RD, BU, YE]
+    category: bundle
+    type: Câble STEMMA QT + fils Dupont
+  W2:
+    wirecount: 3
+    colors: [BK, RD, GN]
+    category: bundle
+    type: Fils Dupont
+
+connections:
+  - - PLAQUE: [2, 1]
+    - QT: [1, 2]
+    - SHT45: [1, 2]
+  - - KS5016: [1, 2]
+    - QT: [3, 4]
+    - SHT45: [3, 4]
+  - - PLAQUE: [2, 1]
+    - W2: [1, 2]
+    - ADAPTATRICE: [1, 2]
+  - - KS5016: [3]
+    - W2: [3]
+    - ADAPTATRICE: [3]
