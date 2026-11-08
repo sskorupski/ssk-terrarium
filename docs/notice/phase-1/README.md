@@ -1,6 +1,6 @@
 # Phase 1 — Le prototype d'hiver
 
-À la fin de cette notice, le régulateur tient le bac à 19 °C en mode `ACTIF`, le protège du gel en mode `HIBERNATION`, et coupe le chauffage dès que le capteur d'air se tait. Les deux câbles chauffants passent par un relais puis par le limiteur Exo Terra réglé à 24 °C, qui coupe de lui-même si le firmware se trompe.
+À la fin de cette notice, le régulateur tient le bac à 19 °C en mode `ACTIF`, le protège du gel en mode `HIBERNATION`, et coupe le chauffage dès que le capteur d'air se tait. Les deux câbles chauffants passent par un relais. Cette phase se monte sans limiteur matériel ni fusible, reportés ([#9](https://github.com/sskorupski/ssk-terrarium/issues/9), [#10](https://github.com/sskorupski/ssk-terrarium/issues/10)) : si le relais 1 reste collé ou si le firmware se trompe, rien de matériel ne coupe le chauffage.
 
 Durée : une demi-journée, en deux temps — le montage en très basse tension (étapes 1 à 8), puis le 230 V (étapes 9 et 10).
 
@@ -10,7 +10,7 @@ La notice part du montage de la [phase 0](../phase-0/README.md) terminé : la ca
 
 ## Ce qu'il faut
 
-Chaque pièce porte un repère, comme dans une notice de meuble. Chaque étape commence par la liste des pièces qu'elle utilise, et le texte comme les schémas citent le repère entre parenthèses : « l'adaptateur jack à vis (**G**) ». Les lettres I et O ne servent pas, ni K, retirée avec la plaque d'essai qui n'est plus nécessaire, pour ne pas les confondre avec 1 et 0. Les illustrations montrent le type de pièce, pas toujours le modèle exact ; leurs auteurs et licences sont en fin de notice.
+Chaque pièce porte un repère, comme dans une notice de meuble. Chaque étape commence par la liste des pièces qu'elle utilise, et le texte comme les schémas citent le repère entre parenthèses : « l'adaptateur jack à vis (**G**) ». Les lettres I et O ne servent pas, pour ne pas les confondre avec 1 et 0 ; K est retirée avec la plaque d'essai qui n'est plus nécessaire, P et U avec le fusible et le limiteur, reportés après la phase 1. Les illustrations montrent le type de pièce, pas toujours le modèle exact ; leurs auteurs et licences sont en fin de notice.
 
 | Repère | Pièce | Ce que c'est, et sa référence d'achat |
 | --- | --- | --- |
@@ -26,12 +26,10 @@ Chaque pièce porte un repère, comme dans une notice de meuble. Chaque étape c
 | **L** | Fils Dupont<br><img src="illustrations/L.jpg" alt="Fils Dupont" width="110"> | Fils à embouts mâle/mâle et mâle/femelle : l'embout femelle s'enfiche sur un picot, la broche mâle dans un trou de la plaque d'essai ou sous une vis |
 | **M** | Fil souple | Fil rouge et fil noir, pour relier les vis du 12 V entre elles |
 | **N** | Cordon secteur<br><img src="illustrations/N.jpg" alt="Fiche de cordon secteur" width="110"> | Câble 3G 1 mm² terminé par une fiche de prise murale |
-| **P** | Porte-fusible<br><img src="illustrations/P.jpg" alt="Porte-fusibles 5 × 20" width="110"> | Porte-fusible 5 × 20, avec un fusible 1 A temporisé |
-| **Q** | Socle de prise<br><img src="illustrations/Q.jpg" alt="Prise femelle" width="110"> | Prise femelle à visser dans le boîtier, où se branchera le limiteur (**U**) |
+| **Q** | Socle de prise<br><img src="illustrations/Q.jpg" alt="Prise femelle" width="110"> | Prise femelle à visser dans le boîtier, où se branchera la multiprise (**V**) |
 | **R** | Fil marron 1 mm²<br><img src="illustrations/R.jpg" alt="Fils électriques rigides" width="110"> | Pour la phase du 230 V. Sur l'illustration, le fil marron est parmi d'autres couleurs. |
 | **S** | Borniers à levier<br><img src="illustrations/S.jpg" alt="Borniers à levier" width="110"> | Raccords où l'on serre des fils en abaissant un levier, sans outil |
 | **T** | Boîtier électrique<br><img src="illustrations/T.jpg" alt="Boîtier électrique" width="110"> | Boîtier fermé, avec un presse-étoupe pour faire passer le cordon secteur (**N**) |
-| **U** | Limiteur | Thermostat de sécurité réglé à 24 °C, qui coupe le chauffage de lui-même si le firmware se trompe. Exo Terra 300 W Dimming & Pulse |
 | **V** | Multiprise<br><img src="illustrations/V.jpg" alt="Multiprise" width="110"> | Deux prises, pour les deux câbles chauffants |
 | **W** | Câbles chauffants | Reptil'us 50 W et 25 W, déjà collés sur les vitres |
 
@@ -209,31 +207,48 @@ Le montage en très basse tension est terminé. Le ranger dans le boîtier (**T*
 
 ## Étape 9 — Câbler le 230 V
 
-*Pièces : E, F, N, P, Q, R, S, T, U, V, W.*
+*Pièces : E, F, N, Q, R, S, T, V, W.*
 
-**Toute cette étape se fait cordon secteur débranché**, sauf l'essai du geste 7 et la mise sous tension du geste 9, boîtier (**T**) refermé.
+**Toute cette étape se fait cordon secteur débranché**, sauf l'essai du geste 6 et la mise sous tension du geste 8, boîtier (**T**) refermé.
 
 Le relais 1 du module relais (**E**) coupe la **phase** du circuit de chauffage. Le neutre et la terre vont directement au socle de prise (**Q**).
 
-1. Dans le boîtier, fixer le porte-fusible (**P**) et le socle de prise femelle. Mettre le fusible **1 A temporisé** dans le porte-fusible.
-2. Cordon secteur (**N**) : son fil **marron** (phase) à l'entrée du porte-fusible ; son fil **bleu** (neutre) à la borne **N** du socle ; son fil **vert et jaune** (terre) à la borne de **terre** du socle. Les raccords se font par borniers à levier (**S**).
-3. Sortie du porte-fusible vers la borne **COM** du relais 1, par un fil marron 1 mm² (**R**).
-4. Borne **NO** du relais 1 vers la borne **L** du socle, par un fil marron 1 mm². Rien ne se branche sur la borne **NC**.
-5. Serrer chaque vis du relais et du socle, puis tirer sur chaque fil : aucun ne doit sortir.
-6. Passer le cordon par un presse-étoupe, et refermer le boîtier.
+Sans fusible, seul le disjoncteur du garage protège ce circuit : un court-circuit sous son calibre n'est coupé par rien ([#10](https://github.com/sskorupski/ssk-terrarium/issues/10)).
+
+1. Dans le boîtier, fixer le socle de prise femelle.
+2. Cordon secteur (**N**) : son fil **marron** (phase) à la borne **COM** du relais 1 ; son fil **bleu** (neutre) à la borne **N** du socle ; son fil **vert et jaune** (terre) à la borne de **terre** du socle. Les raccords se font par borniers à levier (**S**).
+3. Borne **NO** du relais 1 vers la borne **L** du socle, par un fil marron 1 mm² (**R**). Rien ne se branche sur la borne **NC**.
+4. Serrer chaque vis du relais et du socle, puis tirer sur chaque fil : aucun ne doit sortir.
+5. Passer le cordon par un presse-étoupe, et refermer le boîtier.
 
 ![Câblage 230 V](secteur.svg)
 
-7. **Essai à la lampe** : brancher une lampe de chevet, interrupteur allumé, sur le socle, puis le cordon secteur et le bloc 12 V (**F**). La lampe reste éteinte tant que le relais 1 est relâché. Refaire le geste 1 de l'étape 7 (sachet de glaçons) : la lampe s'allume quand le relais s'enclenche, et s'éteint quand il se relâche.
-8. Débrancher le cordon secteur, retirer la lampe.
-9. **Limiteur** (**U**) : régler le limiteur Exo Terra en mode **Pulse** (celui des câbles et tapis chauffants), sur **24 °C**. Brancher le limiteur dans le socle, la multiprise (**V**) dans le limiteur, et les deux câbles chauffants (**W**) dans la multiprise. Placer la sonde du limiteur dans le bac, contre la vitre arrière côté intérieur, à hauteur des escargots. Brancher enfin le cordon secteur.
+6. **Essai à la lampe** : brancher une lampe de chevet, interrupteur allumé, sur le socle, puis le cordon secteur et le bloc 12 V (**F**). La lampe reste éteinte tant que le relais 1 est relâché. Refaire le geste 1 de l'étape 7 (sachet de glaçons) : la lampe s'allume quand le relais s'enclenche, et s'éteint quand il se relâche.
+7. Débrancher le cordon secteur, retirer la lampe.
+8. **Câbles chauffants** (**W**) : brancher la multiprise (**V**) dans le socle, et les deux câbles chauffants dans la multiprise. Brancher enfin le cordon secteur.
+
+### Variante : une rallonge à la place du socle
+
+Sans socle de prise (**Q**), une rallonge courte, terminée d'un côté par une prise femelle et de l'autre par une fiche d'ordinateur (C14), en tient lieu : on coupe la fiche d'ordinateur, et la prise femelle reste au bout de son câble, hors du boîtier (**T**). Le cordon secteur (**N**) peut être un cordon d'ordinateur, dont on coupe la prise d'ordinateur (C13) en gardant la fiche murale. Le marron de la rallonge va directement sur la borne `NO` : le fil marron (**R**) ne sert pas. Ces images remplacent les gestes 1 à 3 ; les gestes 4 à 8 ne changent pas.
+
+Sur le module relais KW-1613 (**E**), le relais 1 est marqué `K1`, tout à droite. Ses trois vis sont, de gauche à droite, `NO`, `COM` et `NC`, d'après le dessin imprimé dessous. Avant de câbler, module relais sans alimentation, au multimètre : `COM` sonne avec `NC`, et `COM` avec `NO` affiche `OL`. Sinon, ne rien brancher. Après la coupe, la broche de terre de la prise femelle sonne avec son fil vert-jaune.
+
+![Vue d'ensemble : dans le boîtier, le marron du cordon secteur va sur COM du relais 1, le marron de la prise femelle sur NO ; les deux bleus se rejoignent dans le bornier à 2 places, les deux vert-jaune dans celui à 5 places. La multiprise se branche dans la prise femelle, les deux câbles chauffants dans la multiprise.](illustrations/etape-9/0-vue-ensemble.jpg)
+
+![Geste 1, cordon débranché : couper le cordon secteur juste derrière sa prise d'ordinateur, et la rallonge juste derrière sa fiche d'ordinateur ; ôter 5 cm de gaine, dénuder 11 mm les fils bleu et vert-jaune, 7 mm le fil marron.](illustrations/etape-9/1-couper.jpg)
+
+![Geste 2, cordon débranché : les deux fils bleus dans le bornier à levier à 2 places, les deux fils vert-jaune dans celui à 5 places, dont 3 places restent vides.](illustrations/etape-9/2-neutre-terre.jpg)
+
+![Geste 3, cordon débranché : le marron de la prise femelle sur la vis NO du relais K1, à gauche ; le marron du cordon secteur sur la vis COM, au milieu ; rien sur NC, à droite.](illustrations/etape-9/3-marron-relais.jpg)
+
+![Ce qu'on ne branche pas : la vis NC du relais 1, les relais K2 à K4, les 3 places libres du bornier à 5 places ; aucun fil 230 V ne touche la carte ESP32, l'abaisseur ou les picots IN du relais.](illustrations/etape-9/4-rien-a-brancher.jpg)
 
 ## Étape 10 — Mise en service
 
-*Pièces : A, B, C, F, U, W.*
+*Pièces : A, B, C, F, W.*
 
 1. Capteur d'air (**B**) au centre du bac, à l'écart de l'emplacement de la future buse ; sonde du substrat (**C**) enfoncée dans le substrat.
-2. Taper `MODE ACTIF` puis **Entrée**. Si l'air du bac est sous 18,5 °C, le relais 1 s'enclenche et le voyant du limiteur (**U**) montre qu'il chauffe.
+2. Taper `MODE ACTIF` puis **Entrée**. Si l'air du bac est sous 18,5 °C, le relais 1 s'enclenche, et la ligne de mesure suivante affiche `chauffage=1`.
 3. Suivre les mesures pendant quelques heures : la température monte vers 19 °C, puis le chauffage alterne autour de 19 °C. Une ligne `PAUSE chauffage apres 2 h continues` veut dire que les câbles ne suffisent pas à tenir la consigne : voir la section « Puissance de chauffe » du cadrage.
 4. Une fois la consigne atteinte, mesurer la vitre côté intérieur, là où les escargots se posent, au thermomètre de contact ou infrarouge, et noter la valeur la plus chaude.
 5. Débrancher le bloc 12 V (**F**) pendant que le chauffage tourne : le relais se relâche, les câbles chauffants (**W**) s'arrêtent. Rebrancher le bloc 12 V : la carte ESP32 (**A**) redémarre dans le mode enregistré.
@@ -259,11 +274,12 @@ Illustrations de la liste du matériel, reprises sous licence libre et réduites
 - **J** — [2.1 mm DC Plug.jpg](https://commons.wikimedia.org/wiki/File:2.1_mm_DC_Plug.jpg), oomlout, CC BY-SA 2.0.
 - **L** — [A few Jumper Wires.jpg](https://commons.wikimedia.org/wiki/File:A_few_Jumper_Wires.jpg), oomlout, CC BY-SA 2.0.
 - **N** — [CEE-7-7-Stecker.jpg](https://commons.wikimedia.org/wiki/File:CEE-7-7-Stecker.jpg), SomnusDe, domaine public.
-- **P** — [Panel Mount Fuse Case.jpg](https://commons.wikimedia.org/wiki/File:Panel_Mount_Fuse_Case.jpg), Suyash Dwivedi, CC BY-SA 4.0.
 - **Q** — [French-power-socket.jpg](https://commons.wikimedia.org/wiki/File:French-power-socket.jpg), Etienne Rastoul, domaine public.
 - **R** — [Installatiedraad.jpg](https://commons.wikimedia.org/wiki/File:Installatiedraad.jpg), Erik Wannee, CC0.
 - **S** — [WAGO 221.jpg](https://commons.wikimedia.org/wiki/File:WAGO_221.jpg), im_tau, CC0.
 - **T** — [IP65 junction box.JPG](https://commons.wikimedia.org/wiki/File:IP65_junction_box.JPG), Dmitry G, CC BY-SA 3.0.
 - **V** — [Adaptateur électrique multiprise CEE 7 04.jpg](https://commons.wikimedia.org/wiki/File:Adaptateur_%C3%A9lectrique_multiprise_CEE_7_04.jpg), Coyau, CC BY-SA 3.0.
 
-Les pièces **M**, **U** et **W** n'ont pas d'illustration : aucune image sous licence libre ne les montrait fidèlement.
+Images de la variante de l'étape 9 (`illustrations/etape-9/`) : photos et annotations de Sébastien Skorupski, sous la licence du dépôt.
+
+Les pièces **M** et **W** n'ont pas d'illustration : aucune image sous licence libre ne les montrait fidèlement.

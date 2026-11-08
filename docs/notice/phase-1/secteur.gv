@@ -35,68 +35,6 @@ graph {
  </td></tr>
 </table>
 > fillcolor="#FFFFFF" shape=box style=filled]
-	FUSIBLE [label=<
-<table border="0" cellspacing="0" cellpadding="0">
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">FUSIBLE</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">(P) Porte-fusible 5 × 20</td>
-   <td balign="left">fusible 1 A temporisé</td>
-   <td balign="left">2-pin</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
-   <tr>
-    <td port="p1l">1</td>
-    <td>Entrée</td>
-    <td port="p1r">1</td>
-   </tr>
-   <tr>
-    <td port="p2l">2</td>
-    <td>Sortie</td>
-    <td port="p2r">2</td>
-   </tr>
-  </table>
- </td></tr>
-</table>
-> fillcolor="#FFFFFF" shape=box style=filled]
-	SOCLE [label=<
-<table border="0" cellspacing="0" cellpadding="0">
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">SOCLE</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">(Q) Socle de prise femelle</td>
-   <td balign="left">reçoit le limiteur Exo Terra 24 °C</td>
-   <td balign="left">3-pin</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
-   <tr>
-    <td port="p1l">1</td>
-    <td>L</td>
-   </tr>
-   <tr>
-    <td port="p2l">2</td>
-    <td>N</td>
-   </tr>
-   <tr>
-    <td port="p3l">3</td>
-    <td>Terre</td>
-   </tr>
-  </table>
- </td></tr>
-</table>
-> fillcolor="#FFFFFF" shape=box style=filled]
 	RELAIS1 [label=<
 <table border="0" cellspacing="0" cellpadding="0">
  <tr><td>
@@ -131,9 +69,41 @@ graph {
  </td></tr>
 </table>
 > fillcolor="#FFFFFF" shape=box style=filled]
+	SOCLE [label=<
+<table border="0" cellspacing="0" cellpadding="0">
+ <tr><td>
+  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
+   <td balign="left">SOCLE</td>
+  </tr></table>
+ </td></tr>
+ <tr><td>
+  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
+   <td balign="left">(Q) Socle de prise femelle</td>
+   <td balign="left">reçoit la multiprise (V)</td>
+   <td balign="left">3-pin</td>
+  </tr></table>
+ </td></tr>
+ <tr><td>
+  <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
+   <tr>
+    <td port="p1l">1</td>
+    <td>L</td>
+   </tr>
+   <tr>
+    <td port="p2l">2</td>
+    <td>N</td>
+   </tr>
+   <tr>
+    <td port="p3l">3</td>
+    <td>Terre</td>
+   </tr>
+  </table>
+ </td></tr>
+</table>
+> fillcolor="#FFFFFF" shape=box style=filled]
 	edge [color="#000000:#895956:#895956:#895956:#000000"]
 	CORDON:p1r:e -- W1:w1:w
-	W1:w1:e -- FUSIBLE:p1l:w
+	W1:w1:e -- RELAIS1:p1l:w
 	edge [color="#000000:#0066ff:#0066ff:#0066ff:#000000"]
 	CORDON:p2r:e -- W1:w2:w
 	W1:w2:e -- SOCLE:p2l:w
@@ -162,7 +132,7 @@ graph {
     <td>
      BN
     </td>
-    <td>FUSIBLE:1:Entrée</td>
+    <td>RELAIS1:1:COM</td>
    </tr>
    <tr>
     <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w1" height="10">
@@ -217,56 +187,13 @@ graph {
 </table>
 > fillcolor="#FFFFFF" shape=box style="filled,dashed"]
 	edge [color="#000000:#895956:#895956:#895956:#000000"]
-	FUSIBLE:p2r:e -- W2:w1:w
-	W2:w1:e -- RELAIS1:p1l:w
+	RELAIS1:p2r:e -- W2:w1:w
+	W2:w1:e -- SOCLE:p1l:w
 	W2 [label=<
 <table border="0" cellspacing="0" cellpadding="0">
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
    <td balign="left">W2</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Fil</td>
-   <td balign="left">1x</td>
-   <td balign="left">1 mm²</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellborder="0">
-   <tr><td>&nbsp;</td></tr>
-   <tr>
-    <td>FUSIBLE:2:Sortie</td>
-    <td>
-     BN
-    </td>
-    <td>RELAIS1:1:COM</td>
-   </tr>
-   <tr>
-    <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w1" height="10">
-     <table cellspacing="0" cellborder="0" border="0">
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#895956" border="0"></td></tr>
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#895956" border="0"></td></tr>
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#895956" border="0"></td></tr>
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
-     </table>
-    </td>
-   </tr>
-   <tr><td>&nbsp;</td></tr>
-  </table>
- </td></tr>
-</table>
-> fillcolor="#FFFFFF" shape=box style="filled,dashed"]
-	edge [color="#000000:#895956:#895956:#895956:#000000"]
-	RELAIS1:p2r:e -- W3:w1:w
-	W3:w1:e -- SOCLE:p1l:w
-	W3 [label=<
-<table border="0" cellspacing="0" cellpadding="0">
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">W3</td>
   </tr></table>
  </td></tr>
  <tr><td>
