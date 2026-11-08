@@ -1,16 +1,108 @@
 #include "mqtt_link.h"
 
-#include <ArduinoJson.h>
+#include <Arduino.h>
+
+#include <cstring>
+
+#include "root_certificates.h"
 
 namespace terrarium::mqtt {
 
-// TODO(phase 3): broker settings, prefix ssk-terrarium/<device-id>/, subscriptions to cmd/#.
-void MqttLink::begin() {}
+namespace {
 
-// TODO(phase 3): non-blocking reconnect with exponential backoff.
-void MqttLink::loop() {}
+constexpr uint16_t kBufferSize = 512;  // The state JSON is about 330 bytes.
+// The OVH load balancer drops a connection idle for 50 s (measured).
+constexpr uint16_t kKeepAliveS = 30;
+constexpr uint16_t kSocketTimeoutS = 10;
+constexpr uint32_t kHandshakeTimeoutS = 10;
+constexpr char kOnline[] = "en-ligne";
+constexpr char kOffline[] = "hors-ligne";
 
-// TODO(phase 3): serialise state into a StaticJsonDocument-sized buffer, retained.
-bool MqttLink::publishState() { return false; }
+}  // namespace
+
+void MqttLink::configure(const supervision::NetworkSettings& settings, const char* deviceId) {
+  if (client_.connected()) client_.disconnect();
+  std::strcpy(host_, settings.brokerHost);
+  port_ = settings.brokerPort;
+  std::strcpy(user_, settings.mqttUser);
+  std::strcpy(password_, settings.mqttPassword);
+  std::strncpy(clientId_, deviceId, sizeof(clientId_) - 1);
+  configured_ =
+      supervision::formatTopic(deviceId, "state", stateTopic_, sizeof(stateTopic_)) &&
+      supervision::formatTopic(deviceId, "status", statusTopic_, sizeof(statusTopic_)) &&
+      supervision::formatTopic(deviceId, "event", eventTopic_, sizeof(eventTopic_)) &&
+      supervision::formatTopic(deviceId, "cmd/mode", modeTopic_, sizeof(modeTopic_)) &&
+      supervision::formatTopic(deviceId, "cmd/config", configTopic_, sizeof(configTopic_));
+
+  tls_.setCACert(kBrokerRootCertificates);
+  tls_.setHandshakeTimeout(kHandshakeTimeoutS);
+  client_.setServer(host_, port_);
+  client_.setBufferSize(kBufferSize);
+  client_.setKeepAlive(kKeepAliveS);
+  client_.setSocketTimeout(kSocketTimeoutS);
+  client_.setCallback([this](char* topic, uint8_t* payload, unsigned int length) {
+    receive(topic, payload, length);
+  });
+  backoff_.succeeded();
+  wasConnected_ = false;
+}
+
+void MqttLink::loop(uint32_t nowMs, bool wifiUp) {
+  if (!configured_) return;
+  if (client_.connected()) {
+    client_.loop();
+    return;
+  }
+  if (wasConnected_) {
+    wasConnected_ = false;
+    gate_.disconnected();
+    Serial.println("MQTT deconnecte");
+  }
+  if (wifiUp && backoff_.ready(nowMs)) connect(nowMs);
+}
+
+void MqttLink::connect(uint32_t nowMs) {
+  // The last will marks the board offline if the connection drops.
+  if (client_.connect(clientId_, user_, password_, statusTopic_, 0, true, kOffline)) {
+    backoff_.succeeded();
+    wasConnected_ = true;
+    client_.publish(statusTopic_, kOnline, true);
+    const bool subscribed = client_.subscribe(modeTopic_) && client_.subscribe(configTopic_);
+    gate_.subscribed(nowMs);
+    Serial.printf("MQTT connecte a %s:%u%s\r\n", host_, port_,
+                  subscribed ? "" : ", ERREUR abonnement aux commandes");
+    return;
+  }
+  backoff_.failed(nowMs);
+  // state() < 0: network or TLS failure; > 0: refused by the broker (5 = bad account).
+  Serial.printf("MQTT echec de connexion a %s:%u (code %d), nouvel essai plus tard\r\n", host_,
+                port_, client_.state());
+}
+
+bool MqttLink::publishEvent(const char* json) {
+  return client_.connected() && client_.publish(eventTopic_, json, false);
+}
+
+void MqttLink::receive(const char* topic, const uint8_t* payload, unsigned int length) {
+  const bool isMode = std::strcmp(topic, modeTopic_) == 0;
+  const bool isConfig = std::strcmp(topic, configTopic_) == 0;
+  if (!isMode && !isConfig) return;
+  const char* subtopic = isMode ? "cmd/mode" : "cmd/config";
+  if (!gate_.accepts(millis())) {
+    char event[supervision::kEventSize];
+    if (supervision::formatRejectedCommandEvent(
+            subtopic, "retenue par le courtier ou recue a la connexion", event)) {
+      publishEvent(event);
+    }
+    Serial.printf("MQTT commande %s ignoree : recue a la connexion\r\n", subtopic);
+    return;
+  }
+  if (handler_) handler_(isMode ? CommandTopic::kMode : CommandTopic::kConfig, payload, length);
+}
+
+bool MqttLink::publishState(const char* json, size_t length) {
+  return client_.connected() && client_.publish(stateTopic_, reinterpret_cast<const uint8_t*>(json),
+                                                static_cast<unsigned int>(length), true);
+}
 
 }  // namespace terrarium::mqtt

@@ -7,6 +7,7 @@ namespace terrarium::control {
 namespace {
 
 constexpr char kModePrefix[] = "MODE ";
+constexpr char kWifiPortalCommand[] = "WIFI CONFIGURER";
 constexpr size_t kMaxWireNameLength = 15;  // "MAINTENANCE" and "HIBERNATION" are 11.
 
 }  // namespace
@@ -25,6 +26,14 @@ bool parseModeCommand(const char* line, Mode& out) {
   std::memcpy(wireName, name, length);
   wireName[length] = '\0';
   return parseMode(wireName, out);
+}
+
+bool isWifiPortalCommand(const char* line) {
+  if (line == nullptr) return false;
+  size_t length = std::strlen(line);
+  if (length > 0 && line[length - 1] == '\r') --length;
+  return length == sizeof(kWifiPortalCommand) - 1 &&
+         std::strncmp(line, kWifiPortalCommand, length) == 0;
 }
 
 }  // namespace terrarium::control

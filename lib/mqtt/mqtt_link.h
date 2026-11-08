@@ -1,24 +1,70 @@
-// MQTT supervision (cadrage section 6): publishes state and events, receives
-// commands. Supervision only: regulation never waits for it.
+// MQTT over TLS to the broker (ADR-supervision-par-mqtt-tls, RG-topics-mqtt).
+// Runs in the supervision task, never in the regulation loop: connecting may
+// take seconds.
 #pragma once
 
 #include <PubSubClient.h>
-#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+
+#include "backoff.h"
+#include "commands.h"
+#include "identity.h"
+#include "network_settings.h"
 
 namespace terrarium::mqtt {
 
+enum class CommandTopic : uint8_t { kMode, kConfig };
+
+// Called from loop() for each command that passed the CommandGate.
+using CommandHandler = std::function<void(CommandTopic, const uint8_t*, size_t)>;
+
 class MqttLink {
  public:
-  MqttLink() : client_(wifi_) {}
+  MqttLink() : client_(tls_) {}
 
-  void begin();
-  // Non-blocking: reconnects with backoff and returns immediately if offline.
-  void loop();
-  bool publishState();
+  // Broker, account and topics. Drops any open connection.
+  void configure(const supervision::NetworkSettings& settings, const char* deviceId);
+
+  // Connects when the Wi-Fi is up, retrying with a growing wait, and serves
+  // the connection. Call it regularly.
+  void loop(uint32_t nowMs, bool wifiUp);
+
+  bool connected() { return client_.connected(); }
+
+  // Publishes the state JSON, retained.
+  bool publishState(const char* json, size_t length);
+
+  // Publishes an answer or a notice on the event topic, not retained.
+  bool publishEvent(const char* json);
+
+  void onCommand(CommandHandler handler) { handler_ = std::move(handler); }
 
  private:
-  WiFiClient wifi_;
+  void connect(uint32_t nowMs);
+  void receive(const char* topic, const uint8_t* payload, unsigned int length);
+
+  WiFiClientSecure tls_;
   PubSubClient client_;
+  supervision::Backoff backoff_{5UL * 1000UL, 5UL * 60UL * 1000UL};
+  bool configured_ = false;
+  bool wasConnected_ = false;
+  // Retained commands arrive within moments of subscribing (RG-topics-mqtt).
+  supervision::CommandGate gate_{3UL * 1000UL};
+  CommandHandler handler_;
+  char host_[sizeof(supervision::NetworkSettings::brokerHost)] = {};
+  uint16_t port_ = 0;
+  char user_[sizeof(supervision::NetworkSettings::mqttUser)] = {};
+  char password_[sizeof(supervision::NetworkSettings::mqttPassword)] = {};
+  char clientId_[supervision::kDeviceIdSize] = {};
+  char stateTopic_[supervision::kTopicSize] = {};
+  char statusTopic_[supervision::kTopicSize] = {};
+  char eventTopic_[supervision::kTopicSize] = {};
+  char modeTopic_[supervision::kTopicSize] = {};
+  char configTopic_[supervision::kTopicSize] = {};
 };
 
 }  // namespace terrarium::mqtt

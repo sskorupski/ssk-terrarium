@@ -20,6 +20,13 @@ class HysteresisRegulator {
   // see must not heat.
   bool update(float measuredC, bool measurementValid);
 
+  // Moves the band to `setpointC` +/- `hysteresisC`, keeping the current output
+  // until the next measurement decides (RG-reglages-bornes).
+  void retune(float setpointC, float hysteresisC) {
+    onBelowC_ = setpointC - hysteresisC;
+    offAtC_ = setpointC + hysteresisC;
+  }
+
   // Forces the output off, e.g. when the mode no longer allows it.
   void reset() { on_ = false; }
 
