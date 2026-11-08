@@ -8,6 +8,10 @@
 #include <esp_idf_version.h>
 #include <esp_task_wdt.h>
 
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+
 #include "air_sensor.h"
 #include "alerts.h"
 #include "commands.h"
@@ -17,12 +21,14 @@
 #include "hysteresis_regulator.h"
 #include "mode_machine.h"
 #include "outputs.h"
+#include "posix_tz.h"
 #include "sensor_watch.h"
 #include "serial_command.h"
 #include "settings_store.h"
 #include "state_message.h"
 #include "substrate_sensor.h"
 #include "supervisor.h"
+#include "time_windows.h"
 
 // Set by outils/version_firmware.py from `git describe`.
 #ifndef FIRMWARE_VERSION
@@ -36,8 +42,11 @@ using terrarium::control::HeatSettings;
 using terrarium::control::HysteresisRegulator;
 using terrarium::control::Mode;
 using terrarium::control::ModeMachine;
+using terrarium::control::ScheduledHeating;
 using terrarium::control::SensorHealth;
 using terrarium::control::SensorWatch;
+using terrarium::control::SettingCommand;
+using terrarium::control::TimeWindows;
 
 namespace {
 
@@ -45,7 +54,7 @@ namespace {
 constexpr Mode kFallbackBootMode = Mode::kMaintenance;
 
 // Longest serial command line, terminator included.
-constexpr size_t kSerialLineSize = 32;
+constexpr size_t kSerialLineSize = 64;  // "PLAGES " and four windows: 54.
 
 // All objects are static: nothing is allocated once loop() runs.
 terrarium::outputs::Outputs outputs({cfg::kPinHeaterRelay, cfg::kPinLightRelay, cfg::kPinMistPump,
@@ -67,6 +76,18 @@ HeatSettings heatSettings{cfg::kSetpointC, cfg::kHeatHysteresisC};
 HysteresisRegulator activeHeating =
     HysteresisRegulator::aroundSetpoint(cfg::kSetpointC, cfg::kHeatHysteresisC);
 HysteresisRegulator frostHeating(cfg::kFrostHeatOnBelowC, cfg::kFrostHeatOffAtC);
+HysteresisRegulator floorHeating(cfg::kFloorHeatOnBelowC, cfg::kFloorHeatOffAtC);
+
+// PLAGES (RG-chauffage-par-plages): windows, time zone, and whether NTP has
+// answered since boot. Only this task reads the clock or sets TZ.
+TimeWindows timeWindows{0, {}};
+char timeZone[terrarium::control::kTimezoneSize] = {};
+uint32_t seenTimeSyncs = 0;
+bool timeKnown = false;
+
+// What PLAGES last announced on the serial link, to report changes only.
+enum class ScheduleReport : uint8_t { kNone, kTimeUnknown, kInWindow, kOutside };
+ScheduleReport lastScheduleReport = ScheduleReport::kNone;
 
 uint32_t lastSensorReadMs = 0;
 bool firstReadDone = false;
@@ -106,6 +127,84 @@ bool heaterFrom(HysteresisRegulator& regulator, SensorHealth health, float tempe
   return false;
 }
 
+TimeWindows defaultTimeWindows() {
+  TimeWindows windows{cfg::kDefaultTimeWindowCount, {}};
+  for (uint8_t i = 0; i < cfg::kDefaultTimeWindowCount; ++i) {
+    windows.windows[i] = {cfg::kDefaultTimeWindows[i][0], cfg::kDefaultTimeWindows[i][1]};
+  }
+  return windows;
+}
+
+void applyTimezoneToClock() {
+  setenv("TZ", timeZone, 1);
+  tzset();
+}
+
+// Local time, minutes since midnight; meaningful only when timeKnown.
+uint16_t minuteOfDay() {
+  const time_t now = time(nullptr);
+  struct tm local{};
+  localtime_r(&now, &local);
+  return static_cast<uint16_t>(local.tm_hour * 60 + local.tm_min);
+}
+
+// Marks the time known at the first NTP answer, and reports each one.
+void pollTimeSync() {
+  const uint32_t syncs = supervisor.timeSyncCount();
+  if (syncs == seenTimeSyncs) return;
+  seenTimeSyncs = syncs;
+  const bool first = !timeKnown;
+  timeKnown = true;
+  const time_t now = time(nullptr);
+  struct tm local{};
+  localtime_r(&now, &local);
+  char text[24];
+  strftime(text, sizeof(text), "%Y-%m-%d %H:%M:%S", &local);
+  Serial.printf("HEURE %s par NTP : %s, fuseau %s\r\n", first ? "connue" : "resynchronisee", text,
+                timeZone);
+}
+
+// Heater state in PLAGES: the setpoint in a window or while the time is
+// unknown, the 12-14 C floor outside (RG-chauffage-par-plages).
+bool scheduledHeater(SensorHealth health, float temperatureC) {
+  const uint16_t minute = timeKnown ? minuteOfDay() : 0;
+  const ScheduledHeating target =
+      terrarium::control::scheduledHeating(timeKnown, timeWindows, minute);
+  ScheduleReport report = ScheduleReport::kTimeUnknown;
+  if (timeKnown) {
+    report = target == ScheduledHeating::kSetpoint ? ScheduleReport::kInWindow
+                                                   : ScheduleReport::kOutside;
+  }
+  if (report != lastScheduleReport) {
+    lastScheduleReport = report;
+    switch (report) {
+      case ScheduleReport::kTimeUnknown:
+        Serial.printf(
+            "PLAGES heure inconnue : chauffage sur la consigne %.1fC jusqu'a l'heure NTP\r\n",
+            heatSettings.setpointC);
+        break;
+      case ScheduleReport::kInWindow:
+        Serial.printf("PLAGES en plage a %02u:%02u : chauffage sur la consigne %.1fC\r\n",
+                      minute / 60U, minute % 60U, heatSettings.setpointC);
+        break;
+      case ScheduleReport::kOutside:
+        Serial.printf(
+            "PLAGES hors plage a %02u:%02u : chauffage seulement sous %.0fC, arret a %.0fC\r\n",
+            minute / 60U, minute % 60U, cfg::kFloorHeatOnBelowC, cfg::kFloorHeatOffAtC);
+        break;
+      case ScheduleReport::kNone:
+        break;
+    }
+  }
+  frostHeating.reset();
+  if (target == ScheduledHeating::kSetpoint) {
+    floorHeating.reset();
+    return heaterFrom(activeHeating, health, temperatureC);
+  }
+  activeHeating.reset();
+  return heaterFrom(floorHeating, health, temperatureC);
+}
+
 // One regulation step. Misting, light and fan stay off in phase 1
 // (RG-sorties-par-mode); an air sensor in fault switches heating off, and so
 // does heating for too long (RG-chauffe-continue-bornee).
@@ -121,18 +220,25 @@ void regulate(const terrarium::sensors::AirReading& air, uint32_t nowMs) {
   const terrarium::control::ModePolicy policy = modeMachine.policy();
   terrarium::outputs::OutputState next{false, false, false, false};
 
+  if (policy.heating != HeatingPolicy::kSchedule) lastScheduleReport = ScheduleReport::kNone;
   switch (policy.heating) {
     case HeatingPolicy::kSetpoint:
       frostHeating.reset();
+      floorHeating.reset();
       next.heater = heaterFrom(activeHeating, health, air.temperatureC);
+      break;
+    case HeatingPolicy::kSchedule:
+      next.heater = scheduledHeater(health, air.temperatureC);
       break;
     case HeatingPolicy::kFrostProtection:
       activeHeating.reset();
+      floorHeating.reset();
       next.heater = heaterFrom(frostHeating, health, air.temperatureC);
       break;
     case HeatingPolicy::kOff:
       activeHeating.reset();
       frostHeating.reset();
+      floorHeating.reset();
       break;
   }
 
@@ -167,8 +273,14 @@ void reportMeasures(const terrarium::sensors::AirReading& air,
   } else {
     Serial.print("--");
   }
-  Serial.printf(" chauffage=%d mode=%s\r\n", outputs.state().heater ? 1 : 0,
+  Serial.printf(" chauffage=%d mode=%s", outputs.state().heater ? 1 : 0,
                 terrarium::control::toString(modeMachine.mode()));
+  if (timeKnown) {
+    const uint16_t minute = minuteOfDay();
+    Serial.printf(" heure=%02u:%02u\r\n", minute / 60U, minute % 60U);
+  } else {
+    Serial.print(" heure=--\r\n");
+  }
 }
 
 // Hands the cycle's state to the supervision task, which publishes it when
@@ -193,6 +305,10 @@ void publishState(const terrarium::sensors::AirReading& air,
   snapshot.heatPaused = heatGuard.paused();
   snapshot.uptimeS = nowMs / 1000;
   snapshot.firmwareVersion = FIRMWARE_VERSION;
+  snapshot.windows = timeWindows;
+  std::memcpy(snapshot.timezone, timeZone, sizeof(snapshot.timezone));
+  snapshot.timeKnown = timeKnown;
+  snapshot.inWindow = timeKnown && terrarium::control::inAnyWindow(timeWindows, minuteOfDay());
   supervisor.publish(snapshot);
 }
 
@@ -256,6 +372,48 @@ void applyHeatSettings(const HeatSettings& candidate) {
   }
 }
 
+// Replaces the PLAGES windows (already validated), saves and reports them.
+void applyTimeWindows(const TimeWindows& windows) {
+  timeWindows = windows;
+  char text[terrarium::control::kTimeWindowsTextSize];
+  terrarium::control::formatTimeWindows(timeWindows, text);
+  if (settingsStore.saveTimeWindows(timeWindows)) {
+    Serial.printf("PLAGES %s enregistrees, conservees apres coupure\r\n", text);
+  } else {
+    Serial.printf("ERREUR plages %s appliquees mais non enregistrees\r\n", text);
+  }
+  // Re-announce the window state at the next regulation step.
+  lastScheduleReport = ScheduleReport::kNone;
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatWindowsEvent(timeWindows, event)) supervisor.sendEvent(event);
+}
+
+// Replaces the time zone (already validated), saves and reports it.
+void applyTimezone(const char (&candidate)[terrarium::control::kTimezoneSize]) {
+  std::memcpy(timeZone, candidate, sizeof(timeZone));
+  applyTimezoneToClock();
+  if (settingsStore.saveTimezone(timeZone)) {
+    Serial.printf("FUSEAU %s enregistre, conserve apres coupure\r\n", timeZone);
+  } else {
+    Serial.printf("ERREUR fuseau %s applique mais non enregistre\r\n", timeZone);
+  }
+  lastScheduleReport = ScheduleReport::kNone;
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatTimezoneEvent(timeZone, event)) supervisor.sendEvent(event);
+}
+
+// A cmd/config: refused whole if its heat part is out of bounds
+// (RG-reglages-bornes); windows and time zone were validated by the parser.
+void applyConfig(const terrarium::supervision::ConfigCommand& config) {
+  if (config.hasHeat) {
+    const bool accepted = terrarium::control::isAcceptedHeatSettings(config.heat, kHeatBounds);
+    applyHeatSettings(config.heat);  // Applies it, or reports the refusal.
+    if (!accepted) return;
+  }
+  if (config.hasWindows) applyTimeWindows(config.windows);
+  if (config.hasTimezone) applyTimezone(config.timezone);
+}
+
 // Commands received over MQTT, applied here, in the regulation loop.
 void pollRemoteCommands() {
   terrarium::network::RemoteCommand command{};
@@ -263,9 +421,84 @@ void pollRemoteCommands() {
     if (command.kind == terrarium::network::RemoteCommand::Kind::kMode) {
       applyMode(command.mode);
     } else {
-      applyHeatSettings(command.settings);
+      applyConfig(command.config);
     }
   }
+}
+
+// Restores the saved windows and time zone if valid, else the firmware's
+// (RG-mode-au-demarrage), and sets the clock's time zone.
+void restoreSchedule() {
+  TimeWindows stored{};
+  timeWindows = defaultTimeWindows();
+  if (settingsStore.loadTimeWindows(stored)) {
+    if (terrarium::control::isValidTimeWindows(stored)) {
+      timeWindows = stored;
+    } else {
+      Serial.println("INFO plages enregistrees invalides, plages du firmware");
+    }
+  }
+  std::memcpy(timeZone, cfg::kDefaultTimezone, sizeof(cfg::kDefaultTimezone));
+  char storedZone[terrarium::control::kTimezoneSize] = {};
+  if (settingsStore.loadTimezone(storedZone)) {
+    if (terrarium::control::isValidPosixTimezone(storedZone)) {
+      std::memcpy(timeZone, storedZone, sizeof(timeZone));
+    } else {
+      Serial.println("INFO fuseau enregistre invalide, fuseau du firmware");
+    }
+  }
+  applyTimezoneToClock();
+  char text[terrarium::control::kTimeWindowsTextSize];
+  terrarium::control::formatTimeWindows(timeWindows, text);
+  Serial.printf("PLAGES %s au demarrage, fuseau %s\r\n", text, timeZone);
+}
+
+void printSchedule() {
+  char text[terrarium::control::kTimeWindowsTextSize];
+  terrarium::control::formatTimeWindows(timeWindows, text);
+  if (timeKnown) {
+    const uint16_t minute = minuteOfDay();
+    Serial.printf("PLAGES actuelles %s, fuseau %s, heure %02u:%02u\r\n", text, timeZone,
+                  minute / 60U, minute % 60U);
+  } else {
+    Serial.printf("PLAGES actuelles %s, fuseau %s, heure inconnue\r\n", text, timeZone);
+  }
+}
+
+// PLAGES and FUSEAU on the serial link. Returns false if `line` is neither.
+bool handleScheduleLine(const char* line) {
+  TimeWindows windows{};
+  switch (terrarium::control::parseWindowsCommand(line, windows)) {
+    case SettingCommand::kShow:
+      printSchedule();
+      return true;
+    case SettingCommand::kSet:
+      applyTimeWindows(windows);
+      return true;
+    case SettingCommand::kInvalid:
+      Serial.println(
+          "REFUS plages : 4 au plus, au format HH:MM-HH:MM separees par une espace, debut "
+          "different de la fin, ou AUCUNE");
+      return true;
+    case SettingCommand::kNone:
+      break;
+  }
+  char zone[terrarium::control::kTimezoneSize] = {};
+  switch (terrarium::control::parseTimezoneCommand(line, zone)) {
+    case SettingCommand::kShow:
+      printSchedule();
+      return true;
+    case SettingCommand::kSet:
+      applyTimezone(zone);
+      return true;
+    case SettingCommand::kInvalid:
+      Serial.println(
+          "REFUS fuseau : chaine POSIX TZ attendue, par exemple CET-1CEST,M3.5.0,M10.5.0/3");
+      return true;
+    case SettingCommand::kNone:
+      break;
+  }
+  return false;
 }
 
 // Restores the saved setpoint and hysteresis if they are within the bounds of
@@ -289,10 +522,12 @@ void handleSerialLine(const char* line) {
     Serial.println("WIFI ouverture du reseau de configuration demandee");
     return;
   }
+  if (handleScheduleLine(line)) return;
   Mode target = modeMachine.mode();
   if (!terrarium::control::parseModeCommand(line, target)) {
     Serial.println(
-        "ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE, WIFI CONFIGURER)");
+        "ERREUR commande inconnue (MODE ACTIF|PLAGES|HIBERNATION|MAINTENANCE, PLAGES, FUSEAU, "
+        "WIFI CONFIGURER)");
     return;
   }
   applyMode(target);
@@ -357,6 +592,7 @@ void setup() {
 
   restoreMode();
   restoreHeatSettings();
+  restoreSchedule();
 
   // Supervision: started last, in its own task, and none of it is awaited.
   supervisor.begin();
@@ -379,6 +615,7 @@ void loop() {
     publishState(air, substrate, nowMs);
   }
 
+  pollTimeSync();
   pollSerial();
   pollRemoteCommands();
   notifier.loop();

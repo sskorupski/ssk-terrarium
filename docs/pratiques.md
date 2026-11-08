@@ -31,7 +31,7 @@ Le vocabulaire du cœur est celui du domaine — mode, consigne, hors-gel, défa
 - Un mot-clé en majuscules ouvre la ligne, puis vient la phrase : `MODE`, `MESURE`, `INFO`, `ABSENT`, `DEFAUT`, `REPRISE`, `PAUSE`, `ERREUR`, `WIFI`, `PORTAIL`, `MQTT`, `CONSIGNE`, `REFUS`. Le mot-clé se filtre, la phrase se lit.
 - Des titres de section `=== … ===` découpent le journal : le premier, avec la version du firmware, sépare ses lignes des messages de démarrage de la puce, qu'il ne contrôle pas ; un autre dit quand l'initialisation est finie. Qui lit le journal sait où regarder, et quelle notice suit la carte.
 - Une situation normale ne s'affiche jamais comme une erreur. Le premier démarrage écrit `INFO aucun mode enregistre, demarrage en MAINTENANCE`, et non le `nvs_open failed: NOT_FOUND` de la bibliothèque `Preferences` : un message de bibliothèque ou du cœur Arduino qui sort dans un cas normal s'évite à la source, et le firmware dit lui-même ce qu'il en est.
-- Un `ERREUR` dit ce qui était attendu : `ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE, WIFI CONFIGURER)`.
+- Un `ERREUR` dit ce qui était attendu : `ERREUR commande inconnue (MODE ACTIF|PLAGES|HIBERNATION|MAINTENANCE, PLAGES, FUSEAU, WIFI CONFIGURER)`.
 - Les messages publiés sur MQTT suivent la même règle : des clés et des valeurs françaises, sans accents (`{"evenement":"reglage","resultat":"refuse","raison":"hors bornes"}`).
 - Les textes s'écrivent sans accents, pour qu'un terminal mal réglé les affiche intacts.
 - Chaque ligne se termine par `\r\n`, comme le fait `Serial.println` : un `Serial.printf` finit donc par `\r\n`, jamais par `\n` seul. Sans le retour chariot, un terminal comme celui de la notice descend d'une ligne sans revenir à gauche, et le journal part en escalier.

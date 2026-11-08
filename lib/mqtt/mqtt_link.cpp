@@ -10,7 +10,7 @@ namespace terrarium::mqtt {
 
 namespace {
 
-constexpr uint16_t kBufferSize = 512;  // The state JSON is about 330 bytes.
+constexpr uint16_t kBufferSize = 768;  // State JSON up to supervision::kStateSize, plus the topic.
 // The OVH load balancer drops a connection idle for 50 s (measured).
 constexpr uint16_t kKeepAliveS = 30;
 constexpr uint16_t kSocketTimeoutS = 10;

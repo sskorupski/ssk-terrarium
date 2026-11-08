@@ -9,7 +9,7 @@ Le code, ses commentaires et les messages de commit sont en anglais ; la documen
 - Fichiers en `snake_case` (`sensor_watch.cpp`), un couple `.h`/`.cpp` par classe ou groupe de fonctions.
 - Espaces de noms `terrarium::<couche>` : `control`, `outputs`, `sensors`, `storage`, `web`, `mqtt`, `alerts`, `config`.
 - Types en `PascalCase`, fonctions et variables en `camelCase`, membres suffixés `_`, constantes et valeurs d'énumération préfixées `k`.
-- Les noms des modes sur les fils (liaison série, MQTT, page web) sont ceux du cadrage, en français et en majuscules : `ACTIF`, `HIBERNATION`, `MAINTENANCE`.
+- Les noms des modes sur les fils (liaison série, MQTT, page web) sont ceux du cadrage, en français et en majuscules : `ACTIF`, `PLAGES`, `HIBERNATION`, `MAINTENANCE`.
 
 ## Commentaires
 

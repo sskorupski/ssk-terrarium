@@ -1,6 +1,7 @@
 #include "state_message.h"
 
 #include <cstdio>
+#include <cstring>
 
 namespace terrarium::supervision {
 
@@ -42,7 +43,27 @@ size_t formatState(const StateSnapshot& s, char* out, size_t size) {
       boolText(s.sensorFault), boolText(s.heatPaused), static_cast<unsigned long>(s.uptimeS),
       safeVersion(s.firmwareVersion));
   if (written <= 0 || static_cast<size_t>(written) >= size) return 0;
-  return static_cast<size_t>(written);
+
+  // Drops the closing brace, then appends the PLAGES part.
+  size_t used = static_cast<size_t>(written) - 1;
+  char windows[control::kMaxTimeWindows * (control::kTimeWindowTextLength + 3) + 1] = "";
+  size_t windowsUsed = 0;
+  if (control::isValidTimeWindows(s.windows)) {
+    for (uint8_t i = 0; i < s.windows.count; ++i) {
+      char one[control::kTimeWindowTextLength + 1];
+      control::formatTimeWindow(s.windows.windows[i], one);
+      windowsUsed += static_cast<size_t>(std::snprintf(
+          windows + windowsUsed, sizeof(windows) - windowsUsed, "%s\"%s\"", i > 0 ? "," : "", one));
+    }
+  }
+  const char* timezone = control::isValidPosixTimezone(s.timezone) ? s.timezone : "";
+  const char* inWindow = s.timeKnown ? boolText(s.inWindow) : "null";
+  const int tail = std::snprintf(out + used, size - used,
+                                 ",\"plages\":[%s],\"fuseau\":\"%s\",\"heure_connue\":%s,"
+                                 "\"en_plage\":%s}",
+                                 windows, timezone, boolText(s.timeKnown), inWindow);
+  if (tail <= 0 || used + static_cast<size_t>(tail) >= size) return 0;
+  return used + static_cast<size_t>(tail);
 }
 
 }  // namespace terrarium::supervision

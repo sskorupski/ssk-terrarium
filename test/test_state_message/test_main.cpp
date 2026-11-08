@@ -5,6 +5,7 @@
 #include "state_message.h"
 
 using terrarium::control::Mode;
+using terrarium::control::TimeWindows;
 using terrarium::supervision::formatState;
 using terrarium::supervision::StateSnapshot;
 
@@ -23,6 +24,10 @@ StateSnapshot sample() {
   s.hysteresisC = 0.5f;
   s.uptimeS = 3600;
   s.firmwareVersion = "phase-1.1";
+  s.windows = TimeWindows{2, {{95, 390}, {845, 1025}}};
+  std::strcpy(s.timezone, "CET-1CEST,M3.5.0,M10.5.0/3");
+  s.timeKnown = true;
+  s.inWindow = false;
   return s;
 }
 
@@ -39,8 +44,37 @@ void test_formats_the_whole_state() {
       "{\"air\":{\"temperature\":19.2,\"humidite\":84},\"substrat\":{\"temperature\":20.5},"
       "\"sorties\":{\"chauffage\":true,\"eclairage\":false,\"pompe\":false,\"ventilateur\":false},"
       "\"mode\":\"ACTIF\",\"consigne\":19.0,\"hysteresis\":0.5,\"defaut_capteur\":false,"
-      "\"pause_chauffage\":false,\"uptime_s\":3600,\"version\":\"phase-1.1\"}",
+      "\"pause_chauffage\":false,\"uptime_s\":3600,\"version\":\"phase-1.1\","
+      "\"plages\":[\"01:35-06:30\",\"14:05-17:05\"],\"fuseau\":\"CET-1CEST,M3.5.0,M10.5.0/3\","
+      "\"heure_connue\":true,\"en_plage\":false}",
       out);
+}
+
+// Before the first NTP answer, whether we are in a window is unknown: null.
+void test_unknown_time_has_no_window_state() {
+  StateSnapshot s = sample();
+  s.timeKnown = false;
+  s.windows = TimeWindows{0, {}};
+  char out[768];
+  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"plages\":[],"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"heure_connue\":false,\"en_plage\":null}"));
+}
+
+// Four windows and the longest time zone still fit the MQTT buffer.
+void test_longest_state_fits() {
+  StateSnapshot s = sample();
+  s.mode = Mode::kHibernation;
+  s.windows = TimeWindows{4, {{0, 60}, {120, 180}, {240, 300}, {1380, 1439}}};
+  std::memset(s.timezone, 'A', 46);
+  s.timezone[46] = '0';
+  s.timezone[47] = '\0';
+  s.airTemperatureC = -10.5f;
+  s.substrateTemperatureC = -10.5f;
+  s.uptimeS = 4294967295UL;
+  s.firmwareVersion = "phase-12.34-567-gabcdef0-dirty";
+  char out[terrarium::supervision::kStateSize];
+  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
 }
 
 void test_invalid_readings_are_null() {
@@ -78,5 +112,7 @@ int main() {
   RUN_TEST(test_invalid_readings_are_null);
   RUN_TEST(test_unsafe_version_is_not_copied);
   RUN_TEST(test_too_small_buffer_gives_zero);
+  RUN_TEST(test_unknown_time_has_no_window_state);
+  RUN_TEST(test_longest_state_fits);
   return UNITY_END();
 }

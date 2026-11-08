@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_mac.h>
+#include <esp_sntp.h>
 
 namespace terrarium::network {
 
@@ -15,7 +16,17 @@ constexpr uint32_t kStepMs = 20;
 // The Wi-Fi driver reconnects by itself; this only restarts a join that gave up.
 constexpr uint32_t kRejoinMs = 60UL * 1000UL;
 constexpr uint8_t kDnsPort = 53;
-constexpr size_t kStateBufferSize = 512;
+constexpr size_t kStateBufferSize = supervision::kStateSize;
+// NTP servers and resynchronisation period (ADR-heure-par-ntp): once at the
+// first Wi-Fi connection after boot, then once a day.
+constexpr char kNtpServer[] = "fr.pool.ntp.org";
+constexpr char kNtpFallbackServer[] = "pool.ntp.org";
+constexpr uint32_t kNtpSyncIntervalMs = 24UL * 60UL * 60UL * 1000UL;
+
+// Written by the lwIP task on each synchronisation, read by the regulation loop.
+std::atomic<uint32_t> ntpSyncCount{0};
+
+void onTimeSynced(struct timeval* /*now*/) { ntpSyncCount.fetch_add(1); }
 constexpr UBaseType_t kCommandQueueLength = 4;
 constexpr UBaseType_t kEventQueueLength = 8;
 
@@ -84,7 +95,7 @@ void Supervisor::handleCommand(mqtt::CommandTopic topic, const uint8_t* payload,
   RemoteCommand command{};
   if (topic == mqtt::CommandTopic::kMode) {
     if (!supervision::parseModePayload(payload, length, command.mode)) {
-      rejectCommand("cmd/mode", "mode inconnu (ACTIF, HIBERNATION, MAINTENANCE)");
+      rejectCommand("cmd/mode", "mode inconnu (ACTIF, PLAGES, HIBERNATION, MAINTENANCE)");
       return;
     }
     command.kind = RemoteCommand::Kind::kMode;
@@ -94,12 +105,12 @@ void Supervisor::handleCommand(mqtt::CommandTopic topic, const uint8_t* payload,
     current = {snapshot_.setpointC, snapshot_.hysteresisC};
     portEXIT_CRITICAL(&lock_);
     const supervision::ConfigError error =
-        supervision::parseConfigPayload(payload, length, current, command.settings);
+        supervision::parseConfigPayload(payload, length, current, command.config);
     if (error != supervision::ConfigError::kNone) {
       rejectCommand("cmd/config", supervision::describe(error));
       return;
     }
-    command.kind = RemoteCommand::Kind::kSettings;
+    command.kind = RemoteCommand::Kind::kConfig;
   }
   if (xQueueSend(commands_, &command, 0) != pdTRUE) {
     rejectCommand(topic == mqtt::CommandTopic::kMode ? "cmd/mode" : "cmd/config",
@@ -179,11 +190,29 @@ void Supervisor::reportWifi(bool connected) {
   if (connected == wifiWasConnected_) return;
   wifiWasConnected_ = connected;
   if (connected) {
+    startNtp();
     Serial.printf("WIFI connecte a %s, adresse %s\r\n", settings_.wifiSsid,
                   WiFi.localIP().toString().c_str());
   } else {
     Serial.println("WIFI perdu, nouvel essai automatique");
   }
+}
+
+uint32_t Supervisor::timeSyncCount() const { return ntpSyncCount.load(); }
+
+// Started once, at the first connection: lwIP then resynchronises by itself
+// every kNtpSyncIntervalMs, and retries while the network is down. Leaves TZ
+// alone: the regulation loop owns it (it alone calls localtime_r).
+void Supervisor::startNtp() {
+  if (ntpStarted_) return;
+  ntpStarted_ = true;
+  sntp_setoperatingmode(SNTP_OPMODE_POLL);
+  sntp_setservername(0, kNtpServer);
+  sntp_setservername(1, kNtpFallbackServer);
+  sntp_set_sync_interval(kNtpSyncIntervalMs);
+  sntp_set_time_sync_notification_cb(onTimeSynced);
+  sntp_init();
+  Serial.printf("HEURE demande NTP a %s, puis une fois par jour\r\n", kNtpServer);
 }
 
 void Supervisor::publishPending() {

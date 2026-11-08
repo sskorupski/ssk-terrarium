@@ -17,6 +17,8 @@ constexpr char kNetworkKey[] = "reseau";
 constexpr char kApPasswordKey[] = "ap_mdp";
 constexpr char kSetpointKey[] = "consigne";
 constexpr char kHysteresisKey[] = "hysteresis";
+constexpr char kTimeWindowsKey[] = "plages";
+constexpr char kTimezoneKey[] = "fuseau";
 
 }  // namespace
 
@@ -63,6 +65,47 @@ bool SettingsStore::saveHeatSettings(const control::HeatSettings& settings) {
   if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
   const bool written = preferences.putFloat(kSetpointKey, settings.setpointC) == sizeof(float) &&
                        preferences.putFloat(kHysteresisKey, settings.hysteresisC) == sizeof(float);
+  preferences.end();
+  return written;
+}
+
+bool SettingsStore::loadTimeWindows(control::TimeWindows& out) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  control::TimeWindows stored{};
+  const bool found =
+      preferences.isKey(kTimeWindowsKey) &&
+      preferences.getBytesLength(kTimeWindowsKey) == sizeof(stored) &&
+      preferences.getBytes(kTimeWindowsKey, &stored, sizeof(stored)) == sizeof(stored);
+  preferences.end();
+  if (found) out = stored;
+  return found;
+}
+
+bool SettingsStore::saveTimeWindows(const control::TimeWindows& windows) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool written =
+      preferences.putBytes(kTimeWindowsKey, &windows, sizeof(windows)) == sizeof(windows);
+  preferences.end();
+  return written;
+}
+
+bool SettingsStore::loadTimezone(char (&out)[control::kTimezoneSize]) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  char stored[control::kTimezoneSize] = {};
+  const bool found = preferences.isKey(kTimezoneKey) &&
+                     preferences.getString(kTimezoneKey, stored, sizeof(stored)) > 0;
+  preferences.end();
+  if (found) std::memcpy(out, stored, sizeof(out));
+  return found;
+}
+
+bool SettingsStore::saveTimezone(const char* timezone) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool written = preferences.putString(kTimezoneKey, timezone) == std::strlen(timezone);
   preferences.end();
   return written;
 }

@@ -100,9 +100,33 @@ void test_stored_mode_round_trips() {
 
 void test_rejects_an_unknown_stored_byte() {
   Mode out = Mode::kActive;
-  TEST_ASSERT_FALSE(modeFromStored(3, out));
+  TEST_ASSERT_FALSE(modeFromStored(4, out));
   TEST_ASSERT_FALSE(modeFromStored(0xFF, out));
   TEST_ASSERT_EQUAL(Mode::kActive, out);
+}
+
+// RG-sorties-par-mode: PLAGES heats by its windows, and allows what ACTIF allows.
+void test_schedule_policy() {
+  const ModePolicy policy = policyFor(Mode::kSchedule);
+  TEST_ASSERT_EQUAL(HeatingPolicy::kSchedule, policy.heating);
+  TEST_ASSERT_TRUE(policy.mistAllowed);
+  TEST_ASSERT_TRUE(policy.lightAllowed);
+}
+
+// RG-topics-mqtt: cmd/mode accepts PLAGES; NVS keeps the bytes of the
+// existing modes, so that an older saved mode still reads back the same.
+void test_schedule_wire_name_and_stored_byte() {
+  Mode out = Mode::kMaintenance;
+  TEST_ASSERT_EQUAL_STRING("PLAGES", toString(Mode::kSchedule));
+  TEST_ASSERT_TRUE(parseMode("PLAGES", out));
+  TEST_ASSERT_EQUAL(Mode::kSchedule, out);
+  TEST_ASSERT_EQUAL_UINT8(0, modeToStored(Mode::kActive));
+  TEST_ASSERT_EQUAL_UINT8(1, modeToStored(Mode::kHibernation));
+  TEST_ASSERT_EQUAL_UINT8(2, modeToStored(Mode::kMaintenance));
+  TEST_ASSERT_EQUAL_UINT8(3, modeToStored(Mode::kSchedule));
+  TEST_ASSERT_TRUE(modeFromStored(3, out));
+  TEST_ASSERT_EQUAL(Mode::kSchedule, out);
+  TEST_ASSERT_FALSE(modeFromStored(4, out));
 }
 
 int main() {
@@ -118,5 +142,7 @@ int main() {
   RUN_TEST(test_rejects_unknown_wire_names);
   RUN_TEST(test_stored_mode_round_trips);
   RUN_TEST(test_rejects_an_unknown_stored_byte);
+  RUN_TEST(test_schedule_policy);
+  RUN_TEST(test_schedule_wire_name_and_stored_byte);
   return UNITY_END();
 }
