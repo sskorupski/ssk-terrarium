@@ -15,6 +15,8 @@ Le régulateur rejoint le Wi-Fi du domicile, publie son état sur le courtier MQ
 3. Saisir le nom et le mot de passe du Wi-Fi du domicile, puis le courtier : adresse `mq.ssk-it.fr`, port `443`, identifiant `terrarium` et son mot de passe (celui scellé dans `ssk-it-infra`). Enregistrer.
 4. La carte rejoint le Wi-Fi (`WIFI connecte a …`), ferme son réseau (`PORTAIL ferme`), puis joint le courtier (`MQTT connecte a mq.ssk-it.fr:443`).
 
+Si la carte ne rejoint pas le Wi-Fi, elle écrit pourquoi, une fois par cause : `WIFI echec de connexion a Noemie : reseau introuvable : absent, trop loin, ou en 5 GHz seulement (code 201)`, ou `mot de passe refuse`, ou `securite non prise en charge : box en WPA3 seul ?`. L'ESP32 ne capte que le 2,4 GHz. Le mode WPA3 seul d'une box n'a pas été essayé avec ce firmware : en cas de `securite non prise en charge`, passer la box en mode mixte WPA2/WPA3.
+
 Le réseau de configuration se rouvre :
 
 - tant que la carte n'a pas rejoint le Wi-Fi qu'on vient d'enregistrer, pour corriger un mot de passe ;

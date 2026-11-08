@@ -63,6 +63,7 @@ class Supervisor {
   void setPortal(bool open);
   void joinWifi(uint32_t nowMs);
   void reportWifi(bool connected);
+  void reportWifiFailure();
   void startNtp();
   void publishPending();
   void handleCommand(mqtt::CommandTopic topic, const uint8_t* payload, size_t length);
@@ -81,6 +82,10 @@ class Supervisor {
   char apPassword_[supervision::kApPasswordLength + 1] = {};
   bool portalOpen_ = false;
   bool wifiWasConnected_ = false;
+  // Last disconnection reason from the Wi-Fi event task, and the last one
+  // printed: the driver retries without end, so each cause prints once.
+  std::atomic<uint8_t> disconnectReason_{0};
+  uint8_t reportedReason_ = 0;
   bool ntpStarted_ = false;
   uint32_t lastJoinMs_ = 0;
 

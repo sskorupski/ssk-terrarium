@@ -5,6 +5,8 @@
 #include <esp_mac.h>
 #include <esp_sntp.h>
 
+#include "wifi_failure.h"
+
 namespace terrarium::network {
 
 namespace {
@@ -27,6 +29,7 @@ constexpr uint32_t kNtpSyncIntervalMs = 24UL * 60UL * 60UL * 1000UL;
 std::atomic<uint32_t> ntpSyncCount{0};
 
 void onTimeSynced(struct timeval* /*now*/) { ntpSyncCount.fetch_add(1); }
+
 constexpr UBaseType_t kCommandQueueLength = 4;
 constexpr UBaseType_t kEventQueueLength = 8;
 
@@ -63,6 +66,11 @@ void Supervisor::begin() {
     Serial.println("WIFI aucun reseau enregistre : reseau de configuration ouvert");
   }
 
+  WiFi.onEvent(
+      [this](arduino_event_id_t, arduino_event_info_t info) {
+        disconnectReason_ = info.wifi_sta_disconnected.reason;
+      },
+      ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   WiFi.persistent(false);  // Settings live in our own NVS keys only.
   WiFi.setAutoReconnect(true);
   WiFi.mode(WIFI_STA);
@@ -139,6 +147,7 @@ void Supervisor::step(uint32_t nowMs) {
 
   const bool connected = WiFi.status() == WL_CONNECTED;
   reportWifi(connected);
+  reportWifiFailure();
   setPortal(plan_.update(nowMs, hasSettings_, connected));
   if (portalOpen_) dns_.processNextRequest();
   if (hasSettings_ && !connected && nowMs - lastJoinMs_ >= kRejoinMs) joinWifi(nowMs);
@@ -190,12 +199,23 @@ void Supervisor::reportWifi(bool connected) {
   if (connected == wifiWasConnected_) return;
   wifiWasConnected_ = connected;
   if (connected) {
+    reportedReason_ = 0;
     startNtp();
     Serial.printf("WIFI connecte a %s, adresse %s\r\n", settings_.wifiSsid,
                   WiFi.localIP().toString().c_str());
   } else {
     Serial.println("WIFI perdu, nouvel essai automatique");
   }
+}
+
+void Supervisor::reportWifiFailure() {
+  const uint8_t reason = disconnectReason_.exchange(0);
+  if (reason == 0 || reason == reportedReason_) return;
+  const char* text = supervision::describeWifiFailure(reason);
+  if (text == nullptr) return;
+  reportedReason_ = reason;
+  Serial.printf("WIFI echec de connexion a %s : %s (code %u)\r\n", settings_.wifiSsid, text,
+                reason);
 }
 
 uint32_t Supervisor::timeSyncCount() const { return ntpSyncCount.load(); }
