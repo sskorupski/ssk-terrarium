@@ -8,12 +8,19 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 
 #include "backoff.h"
+#include "commands.h"
 #include "identity.h"
 #include "network_settings.h"
 
 namespace terrarium::mqtt {
+
+enum class CommandTopic : uint8_t { kMode, kConfig };
+
+// Called from loop() for each command that passed the CommandGate.
+using CommandHandler = std::function<void(CommandTopic, const uint8_t*, size_t)>;
 
 class MqttLink {
  public:
@@ -31,14 +38,23 @@ class MqttLink {
   // Publishes the state JSON, retained.
   bool publishState(const char* json, size_t length);
 
+  // Publishes an answer or a notice on the event topic, not retained.
+  bool publishEvent(const char* json);
+
+  void onCommand(CommandHandler handler) { handler_ = std::move(handler); }
+
  private:
   void connect(uint32_t nowMs);
+  void receive(const char* topic, const uint8_t* payload, unsigned int length);
 
   WiFiClientSecure tls_;
   PubSubClient client_;
   supervision::Backoff backoff_{5UL * 1000UL, 5UL * 60UL * 1000UL};
   bool configured_ = false;
   bool wasConnected_ = false;
+  // Retained commands arrive within moments of subscribing (RG-topics-mqtt).
+  supervision::CommandGate gate_{3UL * 1000UL};
+  CommandHandler handler_;
   char host_[sizeof(supervision::NetworkSettings::brokerHost)] = {};
   uint16_t port_ = 0;
   char user_[sizeof(supervision::NetworkSettings::mqttUser)] = {};
@@ -46,6 +62,9 @@ class MqttLink {
   char clientId_[supervision::kDeviceIdSize] = {};
   char stateTopic_[supervision::kTopicSize] = {};
   char statusTopic_[supervision::kTopicSize] = {};
+  char eventTopic_[supervision::kTopicSize] = {};
+  char modeTopic_[supervision::kTopicSize] = {};
+  char configTopic_[supervision::kTopicSize] = {};
 };
 
 }  // namespace terrarium::mqtt

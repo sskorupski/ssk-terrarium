@@ -5,12 +5,14 @@
 ```
 include/config.h   brochage, valeurs par défaut, limites de sécurité (constexpr)
 src/main.cpp       setup() et loop() : câble capteurs, régulation, sorties, supervision
-lib/control/       logique pure, testée en natif : modes, hystérésis, défaut capteur, commandes série
+lib/control/       logique pure, testée en natif : modes, hystérésis, bornes des réglages, défaut capteur, commandes série
+lib/supervision/   logique pure de la supervision, testée en natif : portail, identité, état et commandes MQTT
 lib/outputs/       les quatre relais : toute écriture d'une sortie passe par là
 lib/sensors/       SHT45 (air, I2C) et DS18B20 (substrat, 1-Wire)
-lib/storage/       NVS : le mode courant, puis les réglages (phase 2)
-lib/web/           page web locale (phase 2)
-lib/mqtt/          publication MQTT (phase 3)
+lib/storage/       NVS : le mode, la consigne, le Wi-Fi et le courtier, le mot de passe du portail
+lib/network/       tâche de supervision sur le cœur 0 : Wi-Fi, portail, MQTT
+lib/web/           portail de configuration ; page web locale (phase 2)
+lib/mqtt/          MQTT sur TLS, racine ISRG Root X1 embarquée
 lib/alerts/        alertes ntfy (phase 3)
 test/test_*/       un dossier par suite Unity, compilées pour l'environnement native
 docs/notice/       notices de montage pas à pas, une par phase, avec leurs schémas WireViz
@@ -28,7 +30,9 @@ pio device monitor                  # liaison série, 115 200 bauds
 clang-format -i src/*.cpp lib/*/*.{h,cpp} include/*.h test/*/*.cpp
 ```
 
-Commandes de la liaison série : `MODE ACTIF`, `MODE HIBERNATION`, `MODE MAINTENANCE`. La carte répond `MODE <mode> enregistre, conserve apres coupure`, `MODE <mode> deja actif`, ou `ERREUR mode <mode> applique mais non enregistre, perdu a la prochaine coupure` si l'écriture en mémoire échoue ; au démarrage, elle écrit `MODE <mode> au demarrage`. Après les lignes de démarrage de la puce (`rst:`, `load:`, `entry`), que le firmware ne contrôle pas, ses propres lignes s'ouvrent sur `=== ssk-terrarium <version> : demarrage ===` — la version vient de `git describe` : le tag `phase-N` pour une version publiée — et l'initialisation se clôt sur `=== pret : regulation en cours ===`. Elle écrit aussi, toutes les 30 s, une ligne `MESURE air=19.2C hr=84% substrat=20.5C chauffage=1 mode=ACTIF` (`--` pour une mesure invalide), et à chaque changement d'état : `INFO aucun mode enregistre, demarrage en MAINTENANCE` au démarrage tant qu'aucun mode n'a été enregistré, `ABSENT capteur air` au démarrage, `DEFAUT capteur air` / `REPRISE capteur air`, `PAUSE chauffage apres 2 h continues` / `REPRISE chauffage`. La LED d'état est allumée tant qu'un défaut capteur ou une pause de chauffe dure.
+Commandes de la liaison série : `MODE ACTIF`, `MODE HIBERNATION`, `MODE MAINTENANCE`, `WIFI CONFIGURER` (rouvre le réseau de configuration 15 minutes). La carte répond `MODE <mode> enregistre, conserve apres coupure`, `MODE <mode> deja actif`, ou `ERREUR mode <mode> applique mais non enregistre, perdu a la prochaine coupure` si l'écriture en mémoire échoue ; au démarrage, elle écrit `MODE <mode> au demarrage`. Après les lignes de démarrage de la puce (`rst:`, `load:`, `entry`), que le firmware ne contrôle pas, ses propres lignes s'ouvrent sur `=== ssk-terrarium <version> : demarrage ===` — la version vient de `git describe` : le tag `phase-N` pour une version publiée — et l'initialisation se clôt sur `=== pret : regulation en cours ===`. Elle écrit aussi, toutes les 30 s, une ligne `MESURE air=19.2C hr=84% substrat=20.5C chauffage=1 mode=ACTIF` (`--` pour une mesure invalide), et à chaque changement d'état : `INFO aucun mode enregistre, demarrage en MAINTENANCE` au démarrage tant qu'aucun mode n'a été enregistré, `ABSENT capteur air` au démarrage, `DEFAUT capteur air` / `REPRISE capteur air`, `PAUSE chauffage apres 2 h continues` / `REPRISE chauffage`. La LED d'état est allumée tant qu'un défaut capteur ou une pause de chauffe dure.
+
+Lignes de la supervision ([supervision.md](supervision.md)) : au démarrage, `WIFI reseau de configuration ssk-terrarium-XXXX, mot de passe …, page http://192.168.4.1`, `MQTT identifiant ssk-terrarium/<id>`, puis `WIFI enregistre : <ssid>, courtier <hote>:<port>` ou `WIFI aucun reseau enregistre : reseau de configuration ouvert`, et `CONSIGNE 20.0C hysteresis 0.5C au demarrage` si une consigne est enregistrée (`INFO consigne enregistree hors bornes, valeurs du firmware` sinon). En marche : `PORTAIL ouvert : reseau …` / `PORTAIL ferme`, `WIFI connecte a <ssid>, adresse <ip>` / `WIFI perdu, nouvel essai automatique`, `WIFI reglages enregistres : …`, `WIFI ouverture du reseau de configuration demandee`, `MQTT connecte a <hote>:<port>`, `MQTT echec de connexion a <hote>:<port> (code N), nouvel essai plus tard` (code négatif : réseau ou TLS ; 4 ou 5 : compte refusé), `MQTT deconnecte`, `MQTT commande cmd/… refusee : <raison>`, `MQTT commande cmd/… ignoree : recue a la connexion`, `CONSIGNE 20.0C hysteresis 0.5C enregistree`, `REFUS consigne … hors bornes (…)`. Un changement de mode reçu par MQTT s'écrit comme un changement série : `MODE HIBERNATION enregistre, conserve apres coupure`.
 
 ## Outils et versions
 
@@ -51,5 +55,7 @@ Le `.gv` d'un schéma ne dépend que de WireViz, alors que le `.svg` dépend aus
 
 - **Dependabot ne connaît pas PlatformIO** : il surveille les actions GitHub et `requirements-ci.txt`, pas `platformio.ini`. Les bibliothèques se relisent à la main, avec `pio pkg outdated -e esp32dev`, à chaque phase.
 - **Une suite native ne voit que `lib/`** : un fichier qui inclut `Arduino.h` n'a pas sa place dans `lib/control`, il ferait échouer la compilation native (INV-6).
+- **La supervision tourne dans sa propre tâche, sur le cœur 0** (`lib/network/supervisor.cpp`) : une connexion TLS prend une à deux secondes, et la boucle de régulation, sur le cœur 1, ne doit jamais l'attendre (INV-3). Les deux tâches n'échangent que par copie : un instantané de l'état sous verrou, une file de commandes, une file d'événements. Seule la tâche de régulation est surveillée par le chien de garde.
+- **Une suite native qui emploie `config.h` l'inclut elle-même** : `include/` n'est pas dans le chemin des bibliothèques de `lib/`. Les bornes et limites passent donc en paramètre au cœur (`HeatGuard`, `isAcceptedHeatSettings`).
 - **`millis()` repasse par zéro au bout de 49,7 jours** : une durée se calcule toujours par soustraction non signée (`now - since > limit`), jamais par comparaison de deux instants.
 - **OneWire 2.3.8 émet deux avertissements** `extra tokens at end of #undef` à la compilation ESP32 : ils viennent de la bibliothèque, pas du projet.

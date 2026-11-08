@@ -5,10 +5,13 @@
 
 #include <DNSServer.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 
 #include <atomic>
 #include <cstdint>
 
+#include "commands.h"
+#include "heat_settings.h"
 #include "identity.h"
 #include "mqtt_link.h"
 #include "network_settings.h"
@@ -18,6 +21,14 @@
 #include "wifi_plan.h"
 
 namespace terrarium::network {
+
+// A command that passed parsing, for the regulation loop to apply or refuse.
+struct RemoteCommand {
+  enum class Kind : uint8_t { kMode, kSettings };
+  Kind kind;
+  control::Mode mode;              // kMode.
+  control::HeatSettings settings;  // kSettings: merged, not yet checked against bounds.
+};
 
 class Supervisor {
  public:
@@ -33,6 +44,13 @@ class Supervisor {
   // WIFI CONFIGURER on the serial link. Never blocks.
   void requestPortal() { portalRequested_ = true; }
 
+  // From the regulation loop: the next command received, if any. Never blocks.
+  bool takeCommand(RemoteCommand& out);
+
+  // From the regulation loop: an event to publish once the broker is
+  // reachable. Dropped if the queue is full. Never blocks.
+  void sendEvent(const char (&event)[supervision::kEventSize]);
+
  private:
   static void taskEntry(void* self);
   void run();
@@ -42,6 +60,8 @@ class Supervisor {
   void joinWifi(uint32_t nowMs);
   void reportWifi(bool connected);
   void publishPending();
+  void handleCommand(mqtt::CommandTopic topic, const uint8_t* payload, size_t length);
+  void rejectCommand(const char* subtopic, const char* reason);
 
   storage::SettingsStore& store_;
   supervision::WifiPlan plan_{5UL * 60UL * 1000UL, 15UL * 60UL * 1000UL};
@@ -62,6 +82,8 @@ class Supervisor {
   supervision::StateSnapshot snapshot_{};
   bool snapshotFresh_ = false;
   std::atomic<bool> portalRequested_{false};
+  QueueHandle_t commands_ = nullptr;
+  QueueHandle_t events_ = nullptr;
 };
 
 }  // namespace terrarium::network

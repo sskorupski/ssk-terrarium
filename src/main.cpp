@@ -10,8 +10,10 @@
 
 #include "air_sensor.h"
 #include "alerts.h"
+#include "commands.h"
 #include "config.h"
 #include "heat_guard.h"
+#include "heat_settings.h"
 #include "hysteresis_regulator.h"
 #include "mode_machine.h"
 #include "outputs.h"
@@ -30,6 +32,7 @@
 namespace cfg = terrarium::config;
 using terrarium::control::HeatGuard;
 using terrarium::control::HeatingPolicy;
+using terrarium::control::HeatSettings;
 using terrarium::control::HysteresisRegulator;
 using terrarium::control::Mode;
 using terrarium::control::ModeMachine;
@@ -56,6 +59,11 @@ terrarium::alerts::Notifier notifier;
 ModeMachine modeMachine(kFallbackBootMode);
 SensorWatch airWatch(cfg::kSensorSilentMaxMs);
 HeatGuard heatGuard(cfg::kHeatContinuousMaxMs, cfg::kHeatPauseMs);
+// Bounds of the settings received from the network (RG-reglages-bornes).
+constexpr terrarium::control::HeatSettingsBounds kHeatBounds{
+    cfg::kSetpointMinC, cfg::kSetpointMaxC, cfg::kHeatHysteresisMinC, cfg::kHeatHysteresisMaxC,
+    cfg::kAlertTempHighC};
+HeatSettings heatSettings{cfg::kSetpointC, cfg::kHeatHysteresisC};
 HysteresisRegulator activeHeating =
     HysteresisRegulator::aroundSetpoint(cfg::kSetpointC, cfg::kHeatHysteresisC);
 HysteresisRegulator frostHeating(cfg::kFrostHeatOnBelowC, cfg::kFrostHeatOffAtC);
@@ -179,8 +187,8 @@ void publishState(const terrarium::sensors::AirReading& air,
   snapshot.mistPump = out.mistPump;
   snapshot.fan = out.fan;
   snapshot.mode = modeMachine.mode();
-  snapshot.setpointC = cfg::kSetpointC;
-  snapshot.hysteresisC = cfg::kHeatHysteresisC;
+  snapshot.setpointC = heatSettings.setpointC;
+  snapshot.hysteresisC = heatSettings.hysteresisC;
   snapshot.sensorFault = airWatch.health() == SensorHealth::kFault;
   snapshot.heatPaused = heatGuard.paused();
   snapshot.uptimeS = nowMs / 1000;
@@ -200,6 +208,81 @@ void restoreMode() {
   Serial.printf("MODE %s au demarrage\r\n", terrarium::control::toString(modeMachine.mode()));
 }
 
+// Switches mode on an explicit command, from the serial link or MQTT
+// (RG-changement-de-mode-manuel), saves it, and reports it on both.
+void applyMode(Mode target) {
+  using terrarium::supervision::ModeOutcome;
+  // Each reply differs from the command typed, so that a terminal echoing the
+  // command still shows that the board answered.
+  const char* name = terrarium::control::toString(target);
+  ModeOutcome outcome = ModeOutcome::kApplied;
+  if (!modeMachine.request(target)) {
+    outcome = ModeOutcome::kAlreadyActive;
+    Serial.printf("MODE %s deja actif\r\n", name);
+  } else if (settingsStore.saveMode(terrarium::control::modeToStored(target))) {
+    Serial.printf("MODE %s enregistre, conserve apres coupure\r\n", name);
+  } else {
+    outcome = ModeOutcome::kNotSaved;
+    Serial.printf("ERREUR mode %s applique mais non enregistre, perdu a la prochaine coupure\r\n",
+                  name);
+  }
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatModeEvent(target, outcome, event)) supervisor.sendEvent(event);
+}
+
+// Applies a setpoint and hysteresis received over MQTT, only within the
+// bounds of config.h (RG-reglages-bornes); anything else is refused whole.
+void applyHeatSettings(const HeatSettings& candidate) {
+  const bool accepted = terrarium::control::isAcceptedHeatSettings(candidate, kHeatBounds);
+  if (accepted) {
+    heatSettings = candidate;
+    activeHeating.retune(heatSettings.setpointC, heatSettings.hysteresisC);
+    if (settingsStore.saveHeatSettings(heatSettings)) {
+      Serial.printf("CONSIGNE %.1fC hysteresis %.1fC enregistree\r\n", heatSettings.setpointC,
+                    heatSettings.hysteresisC);
+    } else {
+      Serial.printf("ERREUR consigne %.1fC appliquee mais non enregistree\r\n",
+                    heatSettings.setpointC);
+    }
+  } else {
+    Serial.printf(
+        "REFUS consigne %.1fC hysteresis %.1fC hors bornes (consigne 15-22C, hysteresis 0.2-2C, "
+        "somme sous 24C)\r\n",
+        candidate.setpointC, candidate.hysteresisC);
+  }
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatSettingsEvent(candidate, accepted, event)) {
+    supervisor.sendEvent(event);
+  }
+}
+
+// Commands received over MQTT, applied here, in the regulation loop.
+void pollRemoteCommands() {
+  terrarium::network::RemoteCommand command{};
+  while (supervisor.takeCommand(command)) {
+    if (command.kind == terrarium::network::RemoteCommand::Kind::kMode) {
+      applyMode(command.mode);
+    } else {
+      applyHeatSettings(command.settings);
+    }
+  }
+}
+
+// Restores the saved setpoint and hysteresis if they are within the bounds of
+// this firmware, else keeps its defaults (RG-mode-au-demarrage).
+void restoreHeatSettings() {
+  HeatSettings stored{};
+  if (!settingsStore.loadHeatSettings(stored)) return;
+  if (!terrarium::control::isAcceptedHeatSettings(stored, kHeatBounds)) {
+    Serial.println("INFO consigne enregistree hors bornes, valeurs du firmware");
+    return;
+  }
+  heatSettings = stored;
+  activeHeating.retune(heatSettings.setpointC, heatSettings.hysteresisC);
+  Serial.printf("CONSIGNE %.1fC hysteresis %.1fC au demarrage\r\n", heatSettings.setpointC,
+                heatSettings.hysteresisC);
+}
+
 void handleSerialLine(const char* line) {
   if (terrarium::control::isWifiPortalCommand(line)) {
     supervisor.requestPortal();
@@ -212,17 +295,7 @@ void handleSerialLine(const char* line) {
         "ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE, WIFI CONFIGURER)");
     return;
   }
-  // Each reply differs from the command typed, so that a terminal echoing the
-  // command still shows that the board answered.
-  const char* name = terrarium::control::toString(target);
-  if (!modeMachine.request(target)) {
-    Serial.printf("MODE %s deja actif\r\n", name);
-  } else if (settingsStore.saveMode(terrarium::control::modeToStored(target))) {
-    Serial.printf("MODE %s enregistre, conserve apres coupure\r\n", name);
-  } else {
-    Serial.printf("ERREUR mode %s applique mais non enregistre, perdu a la prochaine coupure\r\n",
-                  name);
-  }
+  applyMode(target);
 }
 
 // Reads the serial link without blocking, one line at a time. A line ends
@@ -283,8 +356,7 @@ void setup() {
   if (!substrateSensor.begin()) Serial.println("ABSENTE sonde substrat (optionnelle)");
 
   restoreMode();
-  terrarium::storage::Settings settings{};
-  settingsStore.load(settings);  // TODO(phase 2): apply the loaded settings.
+  restoreHeatSettings();
 
   // Supervision: started last, in its own task, and none of it is awaited.
   supervisor.begin();
@@ -308,6 +380,7 @@ void loop() {
   }
 
   pollSerial();
+  pollRemoteCommands();
   notifier.loop();
   delay(10);
 }

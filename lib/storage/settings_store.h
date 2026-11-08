@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+#include "heat_settings.h"
 #include "identity.h"
 #include "network_settings.h"
 
@@ -31,6 +32,12 @@ class SettingsStore {
   // loadMode returns false, leaving `out` untouched, when nothing is stored.
   bool loadMode(uint8_t& out);
   bool saveMode(uint8_t mode);
+
+  // Setpoint and hysteresis of ACTIF heating (RG-mode-au-demarrage). Returns
+  // false, leaving `out` untouched, when none is stored; the caller checks the
+  // bounds itself (RG-reglages-bornes).
+  bool loadHeatSettings(control::HeatSettings& out);
+  bool saveHeatSettings(const control::HeatSettings& settings);
 
   // Wi-Fi and broker settings (RG-configuration-wifi-sur-place). loadNetwork
   // returns false, leaving `out` untouched, when nothing valid is stored.

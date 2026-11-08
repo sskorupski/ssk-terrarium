@@ -15,6 +15,8 @@ constexpr char kModeKey[] = "mode";
 // mismatch, and the board then opens its portal instead of using garbage.
 constexpr char kNetworkKey[] = "reseau";
 constexpr char kApPasswordKey[] = "ap_mdp";
+constexpr char kSetpointKey[] = "consigne";
+constexpr char kHysteresisKey[] = "hysteresis";
 
 }  // namespace
 
@@ -40,6 +42,27 @@ bool SettingsStore::saveMode(uint8_t mode) {
   Preferences preferences;
   if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
   const bool written = preferences.putUChar(kModeKey, mode) == sizeof(mode);
+  preferences.end();
+  return written;
+}
+
+bool SettingsStore::loadHeatSettings(control::HeatSettings& out) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool found = preferences.isKey(kSetpointKey) && preferences.isKey(kHysteresisKey);
+  if (found) {
+    out.setpointC = preferences.getFloat(kSetpointKey);
+    out.hysteresisC = preferences.getFloat(kHysteresisKey);
+  }
+  preferences.end();
+  return found;
+}
+
+bool SettingsStore::saveHeatSettings(const control::HeatSettings& settings) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool written = preferences.putFloat(kSetpointKey, settings.setpointC) == sizeof(float) &&
+                       preferences.putFloat(kHysteresisKey, settings.hysteresisC) == sizeof(float);
   preferences.end();
   return written;
 }

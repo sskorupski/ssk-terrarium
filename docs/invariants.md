@@ -18,7 +18,7 @@ Un capteur muet ou aberrant plus de 2 minutes est en défaut : chauffage et pomp
 
 ## INV-3 — La régulation ne dépend jamais du réseau
 
-Mesure, décision et pilotage des sorties tournent sur l'ESP32 seul. La page web, MQTT et les alertes supervisent ; rien de la boucle de régulation n'attend une réponse du réseau (RG-regulation-sans-reseau).
+Mesure, décision et pilotage des sorties tournent sur l'ESP32 seul. Le portail, MQTT et les alertes supervisent, depuis leur propre tâche ; rien de la boucle de régulation n'attend une réponse du réseau (RG-regulation-sans-reseau). Une commande reçue du réseau entre dans une file que la boucle lit sans attendre.
 
 - **Ce qu'il protège** : une box qui redémarre ou un Wi-Fi absent ne changent rien au climat du terrarium.
 - **Sans lui** : un appel réseau bloquant suffit à figer la boucle, et le chien de garde à redémarrer la carte en boucle.
@@ -34,7 +34,7 @@ Le limiteur matériel à 24 °C que cet invariant imposait jusqu'ici est report�
 
 ## INV-5 — Les limites de sécurité ne se règlent pas à l'exécution
 
-Durée maximale d'une impulsion de brumisation, de chauffe continue, de silence d'un capteur : ce sont des `constexpr` de `include/config.h`, jamais des réglages. Les réglages en NVS sont bornés par elles avant d'être acceptés.
+Durée maximale d'une impulsion de brumisation, de chauffe continue, de silence d'un capteur, et bornes des réglages reçus du réseau (consigne de 15 à 22 °C, hystérésis de 0,2 à 2 °C, arrêt du chauffage sous 24 °C) : ce sont des `constexpr` de `include/config.h`, jamais des réglages. Un réglage reçu par MQTT ou relu en NVS est refusé hors de ces bornes (RG-reglages-bornes).
 
 - **Ce qu'il protège** : une page web ou un message MQTT erroné ne peut pas lever une protection.
 - **Sans lui** : une faute de frappe dans un réglage suffirait à noyer ou cuire le terrarium.

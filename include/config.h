@@ -61,6 +61,15 @@ constexpr uint32_t kHeatContinuousMaxMs = 2UL * 60UL * 60UL * 1000UL;
 constexpr uint32_t kHeatPauseMs = 15UL * 60UL * 1000UL;
 constexpr uint32_t kSensorSilentMaxMs = 2UL * 60UL * 1000UL;
 
+// --- Bounds of the remote settings (RG-reglages-bornes), never overridable ----
+// A setpoint or hysteresis received from the network, or read back from NVS,
+// is refused outside these bounds; heating must also stop below the high alert.
+
+constexpr float kSetpointMinC = 15.0f;
+constexpr float kSetpointMaxC = 22.0f;
+constexpr float kHeatHysteresisMinC = 0.2f;
+constexpr float kHeatHysteresisMaxC = 2.0f;
+
 // --- Alert thresholds (cadrage F9) --------------------------------------------
 
 constexpr float kAlertTempLowC = 15.0f;
@@ -80,5 +89,11 @@ static_assert(kFanOnDurationMs < kFanCyclePeriodMs, "fan would never stop");
 static_assert(kLightOnHour < kLightOffHour && kLightOffHour <= 24, "invalid light schedule");
 static_assert(kSetpointC + kHeatHysteresisC < kAlertTempHighC,
               "setpoint band reaches the high alert threshold");
+static_assert(kSetpointMinC <= kSetpointC && kSetpointC <= kSetpointMaxC,
+              "default setpoint outside its bounds");
+static_assert(kHeatHysteresisMinC <= kHeatHysteresisC && kHeatHysteresisC <= kHeatHysteresisMaxC,
+              "default hysteresis outside its bounds");
+static_assert(kSetpointMinC - kHeatHysteresisMaxC > kFrostHeatOffAtC,
+              "lowest active band overlaps frost protection");
 
 }  // namespace terrarium::config

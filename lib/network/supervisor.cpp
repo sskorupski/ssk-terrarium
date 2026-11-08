@@ -16,10 +16,21 @@ constexpr uint32_t kStepMs = 20;
 constexpr uint32_t kRejoinMs = 60UL * 1000UL;
 constexpr uint8_t kDnsPort = 53;
 constexpr size_t kStateBufferSize = 512;
+constexpr UBaseType_t kCommandQueueLength = 4;
+constexpr UBaseType_t kEventQueueLength = 8;
+
+struct EventItem {
+  char text[supervision::kEventSize];
+};
 
 }  // namespace
 
 void Supervisor::begin() {
+  commands_ = xQueueCreate(kCommandQueueLength, sizeof(RemoteCommand));
+  events_ = xQueueCreate(kEventQueueLength, sizeof(EventItem));
+  mqtt_.onCommand([this](mqtt::CommandTopic topic, const uint8_t* payload, size_t length) {
+    handleCommand(topic, payload, length);
+  });
   uint8_t mac[6] = {};
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   supervision::formatDeviceId(mac, deviceId_);
@@ -56,6 +67,50 @@ void Supervisor::publish(const supervision::StateSnapshot& snapshot) {
   snapshot_ = snapshot;
   snapshotFresh_ = true;
   portEXIT_CRITICAL(&lock_);
+}
+
+bool Supervisor::takeCommand(RemoteCommand& out) {
+  return commands_ != nullptr && xQueueReceive(commands_, &out, 0) == pdTRUE;
+}
+
+void Supervisor::sendEvent(const char (&event)[supervision::kEventSize]) {
+  if (events_ == nullptr) return;
+  EventItem item;
+  memcpy(item.text, event, sizeof(item.text));
+  xQueueSend(events_, &item, 0);
+}
+
+void Supervisor::handleCommand(mqtt::CommandTopic topic, const uint8_t* payload, size_t length) {
+  RemoteCommand command{};
+  if (topic == mqtt::CommandTopic::kMode) {
+    if (!supervision::parseModePayload(payload, length, command.mode)) {
+      rejectCommand("cmd/mode", "mode inconnu (ACTIF, HIBERNATION, MAINTENANCE)");
+      return;
+    }
+    command.kind = RemoteCommand::Kind::kMode;
+  } else {
+    control::HeatSettings current{};
+    portENTER_CRITICAL(&lock_);
+    current = {snapshot_.setpointC, snapshot_.hysteresisC};
+    portEXIT_CRITICAL(&lock_);
+    const supervision::ConfigError error =
+        supervision::parseConfigPayload(payload, length, current, command.settings);
+    if (error != supervision::ConfigError::kNone) {
+      rejectCommand("cmd/config", supervision::describe(error));
+      return;
+    }
+    command.kind = RemoteCommand::Kind::kSettings;
+  }
+  if (xQueueSend(commands_, &command, 0) != pdTRUE) {
+    rejectCommand(topic == mqtt::CommandTopic::kMode ? "cmd/mode" : "cmd/config",
+                  "trop de commandes en attente");
+  }
+}
+
+void Supervisor::rejectCommand(const char* subtopic, const char* reason) {
+  char event[supervision::kEventSize];
+  if (supervision::formatRejectedCommandEvent(subtopic, reason, event)) mqtt_.publishEvent(event);
+  Serial.printf("MQTT commande %s refusee : %s\r\n", subtopic, reason);
 }
 
 void Supervisor::taskEntry(void* self) { static_cast<Supervisor*>(self)->run(); }
@@ -133,6 +188,11 @@ void Supervisor::reportWifi(bool connected) {
 
 void Supervisor::publishPending() {
   if (!mqtt_.connected()) return;
+  EventItem item;
+  while (xQueuePeek(events_, &item, 0) == pdTRUE) {
+    if (!mqtt_.publishEvent(item.text)) break;
+    xQueueReceive(events_, &item, 0);
+  }
   supervision::StateSnapshot snapshot{};
   portENTER_CRITICAL(&lock_);
   const bool fresh = snapshotFresh_;
