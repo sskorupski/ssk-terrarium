@@ -4,14 +4,15 @@
 
 #include <cstring>
 
-#include "isrg_root_x1.h"
+#include "root_certificates.h"
 
 namespace terrarium::mqtt {
 
 namespace {
 
 constexpr uint16_t kBufferSize = 512;  // The state JSON is about 330 bytes.
-constexpr uint16_t kKeepAliveS = 60;
+// The OVH load balancer drops a connection idle for 50 s (measured).
+constexpr uint16_t kKeepAliveS = 30;
 constexpr uint16_t kSocketTimeoutS = 10;
 constexpr uint32_t kHandshakeTimeoutS = 10;
 constexpr char kOnline[] = "en-ligne";
@@ -33,7 +34,7 @@ void MqttLink::configure(const supervision::NetworkSettings& settings, const cha
       supervision::formatTopic(deviceId, "cmd/mode", modeTopic_, sizeof(modeTopic_)) &&
       supervision::formatTopic(deviceId, "cmd/config", configTopic_, sizeof(configTopic_));
 
-  tls_.setCACert(kIsrgRootX1);
+  tls_.setCACert(kBrokerRootCertificates);
   tls_.setHandshakeTimeout(kHandshakeTimeoutS);
   client_.setServer(host_, port_);
   client_.setBufferSize(kBufferSize);

@@ -12,7 +12,7 @@ lib/sensors/       SHT45 (air, I2C) et DS18B20 (substrat, 1-Wire)
 lib/storage/       NVS : le mode, la consigne, le Wi-Fi et le courtier, le mot de passe du portail
 lib/network/       tâche de supervision sur le cœur 0 : Wi-Fi, portail, MQTT
 lib/web/           portail de configuration ; page web locale (phase 2)
-lib/mqtt/          MQTT sur TLS, racine ISRG Root X1 embarquée
+lib/mqtt/          MQTT sur TLS, racines ISRG Root X1 et Root YR embarquées
 lib/alerts/        alertes ntfy (phase 3)
 test/test_*/       un dossier par suite Unity, compilées pour l'environnement native
 docs/notice/       notices de montage pas à pas, une par phase, avec leurs schémas WireViz
