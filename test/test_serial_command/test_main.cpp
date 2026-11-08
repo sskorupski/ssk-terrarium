@@ -41,10 +41,22 @@ void test_rejects_anything_else_and_leaves_mode_untouched() {
   TEST_ASSERT_EQUAL(Mode::kHibernation, out);
 }
 
+// RG-configuration-wifi-sur-place: WIFI CONFIGURER reopens the portal.
+void test_parses_the_portal_command() {
+  TEST_ASSERT_TRUE(terrarium::control::isWifiPortalCommand("WIFI CONFIGURER"));
+  TEST_ASSERT_TRUE(terrarium::control::isWifiPortalCommand("WIFI CONFIGURER\r"));
+  TEST_ASSERT_FALSE(terrarium::control::isWifiPortalCommand("WIFI configurer"));
+  TEST_ASSERT_FALSE(terrarium::control::isWifiPortalCommand("WIFI CONFIGURER x"));
+  TEST_ASSERT_FALSE(terrarium::control::isWifiPortalCommand("WIFI"));
+  TEST_ASSERT_FALSE(terrarium::control::isWifiPortalCommand(""));
+  TEST_ASSERT_FALSE(terrarium::control::isWifiPortalCommand(nullptr));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_parses_each_mode_command);
   RUN_TEST(test_ignores_a_trailing_carriage_return);
   RUN_TEST(test_rejects_anything_else_and_leaves_mode_untouched);
+  RUN_TEST(test_parses_the_portal_command);
   return UNITY_END();
 }
