@@ -7,15 +7,24 @@
 
 using terrarium::control::HeatSettings;
 using terrarium::control::Mode;
+using terrarium::control::TimeWindows;
 using namespace terrarium::supervision;
 
 namespace {
 
 constexpr HeatSettings kCurrent{19.0f, 0.5f};
 
-ConfigError parseConfig(const char* json, HeatSettings& out) {
+ConfigError parseCommand(const char* json, ConfigCommand& out) {
   return parseConfigPayload(reinterpret_cast<const uint8_t*>(json), std::strlen(json), kCurrent,
                             out);
+}
+
+// The heat part of a command, for the tests written before the windows.
+ConfigError parseConfig(const char* json, HeatSettings& out) {
+  ConfigCommand command{};
+  const ConfigError error = parseCommand(json, command);
+  if (error == ConfigError::kNone && command.hasHeat) out = command.heat;
+  return error;
 }
 
 bool parseModeText(const char* text, Mode& out) {
@@ -139,6 +148,75 @@ void test_each_config_error_reads_in_french() {
   TEST_ASSERT_EQUAL_STRING("champ inconnu", describe(ConfigError::kUnknownField));
 }
 
+// RG-topics-mqtt: cmd/config carries the windows, which replace the current ones.
+void test_config_payload_carries_windows() {
+  ConfigCommand out{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone,
+                    parseCommand("{\"plages\":[\"01:35-06:30\",\"14:05-17:05\"]}", out));
+  TEST_ASSERT_FALSE(out.hasHeat);
+  TEST_ASSERT_FALSE(out.hasTimezone);
+  TEST_ASSERT_TRUE(out.hasWindows);
+  TEST_ASSERT_EQUAL_UINT8(2, out.windows.count);
+  TEST_ASSERT_EQUAL_UINT16(14 * 60 + 5, out.windows.windows[1].startMinute);
+  TEST_ASSERT_EQUAL(ConfigError::kNone, parseCommand("{\"plages\":[]}", out));
+  TEST_ASSERT_TRUE(out.hasWindows);
+  TEST_ASSERT_EQUAL_UINT8(0, out.windows.count);
+}
+
+// RG-reglages-bornes: one bad window refuses the whole command.
+void test_config_payload_refuses_bad_windows() {
+  ConfigCommand out{};
+  for (const char* bad :
+       {"{\"plages\":[\"25:00-01:00\"]}", "{\"plages\":\"01:35-06:30\"}",
+        "{\"plages\":[\"08:00-08:00\"]}", "{\"plages\":[1]}", "{\"plages\":null}",
+        "{\"consigne\":20,\"plages\":[\"x\"]}",
+        "{\"plages\":[\"00:00-01:00\",\"02:00-03:00\",\"04:00-05:00\",\"06:00-07:00\","
+        "\"08:00-09:00\"]}"}) {
+    TEST_ASSERT_EQUAL_MESSAGE(ConfigError::kBadWindows, parseCommand(bad, out), bad);
+  }
+}
+
+// ADR-heure-par-ntp: cmd/config carries the time zone, refused unless valid.
+void test_config_payload_carries_a_timezone() {
+  ConfigCommand out{};
+  TEST_ASSERT_EQUAL(
+      ConfigError::kNone,
+      parseCommand("{\"fuseau\":\"CET-1CEST,M3.5.0,M10.5.0/3\",\"consigne\":20}", out));
+  TEST_ASSERT_TRUE(out.hasTimezone);
+  TEST_ASSERT_EQUAL_STRING("CET-1CEST,M3.5.0,M10.5.0/3", out.timezone);
+  TEST_ASSERT_TRUE(out.hasHeat);
+  TEST_ASSERT_EQUAL_FLOAT(20.0f, out.heat.setpointC);
+  TEST_ASSERT_EQUAL_FLOAT(0.5f, out.heat.hysteresisC);
+  TEST_ASSERT_EQUAL(ConfigError::kBadTimezone, parseCommand("{\"fuseau\":\"Europe/Paris\"}", out));
+  TEST_ASSERT_EQUAL(ConfigError::kBadTimezone, parseCommand("{\"fuseau\":1}", out));
+}
+
+void test_window_and_timezone_events() {
+  char out[kEventSize];
+  const TimeWindows windows{2, {{95, 390}, {845, 1025}}};
+  TEST_ASSERT_TRUE(formatWindowsEvent(windows, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"plages\":[\"01:35-06:30\",\"14:05-17:05\"],"
+      "\"resultat\":\"applique\"}",
+      out);
+  TEST_ASSERT_TRUE(formatWindowsEvent(TimeWindows{0, {}}, out));
+  TEST_ASSERT_EQUAL_STRING("{\"evenement\":\"reglage\",\"plages\":[],\"resultat\":\"applique\"}",
+                           out);
+  TEST_ASSERT_TRUE(formatTimezoneEvent("CET-1CEST,M3.5.0,M10.5.0/3", out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"fuseau\":\"CET-1CEST,M3.5.0,M10.5.0/3\","
+      "\"resultat\":\"applique\"}",
+      out);
+  TEST_ASSERT_EQUAL_STRING("plages invalides", describe(ConfigError::kBadWindows));
+  TEST_ASSERT_EQUAL_STRING("fuseau invalide", describe(ConfigError::kBadTimezone));
+}
+
+void test_mode_payload_accepts_plages() {
+  Mode out = Mode::kMaintenance;
+  TEST_ASSERT_TRUE(parseModeText("PLAGES", out));
+  TEST_ASSERT_EQUAL(Mode::kSchedule, out);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_mode_payload_is_a_bare_name);
@@ -152,5 +230,10 @@ int main() {
   RUN_TEST(test_gate_closes_on_disconnection);
   RUN_TEST(test_events_read_without_the_code);
   RUN_TEST(test_each_config_error_reads_in_french);
+  RUN_TEST(test_config_payload_carries_windows);
+  RUN_TEST(test_config_payload_refuses_bad_windows);
+  RUN_TEST(test_config_payload_carries_a_timezone);
+  RUN_TEST(test_window_and_timezone_events);
+  RUN_TEST(test_mode_payload_accepts_plages);
   return UNITY_END();
 }

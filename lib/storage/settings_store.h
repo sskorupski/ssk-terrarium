@@ -7,6 +7,8 @@
 #include "heat_settings.h"
 #include "identity.h"
 #include "network_settings.h"
+#include "posix_tz.h"
+#include "time_windows.h"
 
 namespace terrarium::storage {
 
@@ -38,6 +40,13 @@ class SettingsStore {
   // bounds itself (RG-reglages-bornes).
   bool loadHeatSettings(control::HeatSettings& out);
   bool saveHeatSettings(const control::HeatSettings& settings);
+
+  // Windows and time zone of PLAGES (RG-mode-au-demarrage). Return false,
+  // leaving `out` untouched, when none is stored; the caller validates.
+  bool loadTimeWindows(control::TimeWindows& out);
+  bool saveTimeWindows(const control::TimeWindows& windows);
+  bool loadTimezone(char (&out)[control::kTimezoneSize]);
+  bool saveTimezone(const char* timezone);
 
   // Wi-Fi and broker settings (RG-configuration-wifi-sur-place). loadNetwork
   // returns false, leaving `out` untouched, when nothing valid is stored.

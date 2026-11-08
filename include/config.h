@@ -53,6 +53,18 @@ constexpr uint32_t kFanOnDurationMs = 5UL * 60UL * 1000UL;
 constexpr float kFrostHeatOnBelowC = 4.0f;
 constexpr float kFrostHeatOffAtC = 6.0f;
 
+// --- PLAGES mode (cadrage 2026-003, RG-chauffage-par-plages) ------------------
+
+// Floor outside the windows: not a setting (RG-reglages-bornes).
+constexpr float kFloorHeatOnBelowC = 12.0f;
+constexpr float kFloorHeatOffAtC = 14.0f;
+// Default windows, in minutes since midnight: 01:35-06:30 and 14:05-17:05.
+constexpr uint8_t kDefaultTimeWindowCount = 2;
+constexpr uint16_t kDefaultTimeWindows[kDefaultTimeWindowCount][2] = {{1 * 60 + 35, 6 * 60 + 30},
+                                                                      {14 * 60 + 5, 17 * 60 + 5}};
+// Paris, summer time included (ADR-heure-par-ntp).
+constexpr char kDefaultTimezone[] = "CET-1CEST,M3.5.0,M10.5.0/3";
+
 // --- Safety limits (cadrage section 5), never overridable ---------------------
 
 constexpr uint32_t kMistPulseMaxMs = 30UL * 1000UL;
@@ -93,6 +105,10 @@ static_assert(kSetpointMinC <= kSetpointC && kSetpointC <= kSetpointMaxC,
               "default setpoint outside its bounds");
 static_assert(kHeatHysteresisMinC <= kHeatHysteresisC && kHeatHysteresisC <= kHeatHysteresisMaxC,
               "default hysteresis outside its bounds");
+static_assert(kFloorHeatOnBelowC < kFloorHeatOffAtC, "floor band must not be empty");
+static_assert(kFrostHeatOffAtC < kFloorHeatOnBelowC, "floor band overlaps frost protection");
+static_assert(kFloorHeatOffAtC < kAlertTempHighC, "floor band reaches the high alert threshold");
+static_assert(kDefaultTimeWindowCount <= 4, "at most four windows");
 static_assert(kSetpointMinC - kHeatHysteresisMaxC > kFrostHeatOffAtC,
               "lowest active band overlaps frost protection");
 

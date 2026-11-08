@@ -24,10 +24,10 @@ namespace terrarium::network {
 
 // A command that passed parsing, for the regulation loop to apply or refuse.
 struct RemoteCommand {
-  enum class Kind : uint8_t { kMode, kSettings };
+  enum class Kind : uint8_t { kMode, kConfig };
   Kind kind;
-  control::Mode mode;              // kMode.
-  control::HeatSettings settings;  // kSettings: merged, not yet checked against bounds.
+  control::Mode mode;                 // kMode.
+  supervision::ConfigCommand config;  // kConfig: heat merged, not yet checked against bounds.
 };
 
 class Supervisor {
@@ -47,6 +47,10 @@ class Supervisor {
   // From the regulation loop: the next command received, if any. Never blocks.
   bool takeCommand(RemoteCommand& out);
 
+  // Number of NTP synchronisations since boot (ADR-heure-par-ntp): the first
+  // makes the time known. Never blocks.
+  uint32_t timeSyncCount() const;
+
   // From the regulation loop: an event to publish once the broker is
   // reachable. Dropped if the queue is full. Never blocks.
   void sendEvent(const char (&event)[supervision::kEventSize]);
@@ -60,6 +64,7 @@ class Supervisor {
   void joinWifi(uint32_t nowMs);
   void reportWifi(bool connected);
   void reportWifiFailure();
+  void startNtp();
   void publishPending();
   void handleCommand(mqtt::CommandTopic topic, const uint8_t* payload, size_t length);
   void rejectCommand(const char* subtopic, const char* reason);
@@ -81,6 +86,7 @@ class Supervisor {
   // printed: the driver retries without end, so each cause prints once.
   std::atomic<uint8_t> disconnectReason_{0};
   uint8_t reportedReason_ = 0;
+  bool ntpStarted_ = false;
   uint32_t lastJoinMs_ = 0;
 
   portMUX_TYPE lock_ = portMUX_INITIALIZER_UNLOCKED;

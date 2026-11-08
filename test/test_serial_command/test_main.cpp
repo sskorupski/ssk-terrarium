@@ -3,6 +3,11 @@
 #include "mode_machine.h"
 #include "serial_command.h"
 
+using terrarium::control::parseTimezoneCommand;
+using terrarium::control::parseWindowsCommand;
+using terrarium::control::SettingCommand;
+using terrarium::control::TimeWindows;
+
 using terrarium::control::Mode;
 using terrarium::control::parseModeCommand;
 
@@ -52,11 +57,59 @@ void test_parses_the_portal_command() {
   TEST_ASSERT_FALSE(terrarium::control::isWifiPortalCommand(nullptr));
 }
 
+// RG-reglages-bornes: PLAGES shows or replaces the windows.
+void test_parses_the_windows_command() {
+  TimeWindows out{9, {}};
+  TEST_ASSERT_EQUAL(SettingCommand::kShow, parseWindowsCommand("PLAGES", out));
+  TEST_ASSERT_EQUAL(SettingCommand::kShow, parseWindowsCommand("PLAGES\r", out));
+  TEST_ASSERT_EQUAL_UINT8(9, out.count);
+  TEST_ASSERT_EQUAL(SettingCommand::kSet,
+                    parseWindowsCommand("PLAGES 01:35-06:30 14:05-17:05", out));
+  TEST_ASSERT_EQUAL_UINT8(2, out.count);
+  TEST_ASSERT_EQUAL(SettingCommand::kSet, parseWindowsCommand("PLAGES AUCUNE\r", out));
+  TEST_ASSERT_EQUAL_UINT8(0, out.count);
+}
+
+void test_rejects_a_bad_windows_command() {
+  TimeWindows out{2, {}};
+  TEST_ASSERT_EQUAL(SettingCommand::kInvalid, parseWindowsCommand("PLAGES 25:00-01:00", out));
+  TEST_ASSERT_EQUAL(SettingCommand::kInvalid, parseWindowsCommand("PLAGES ", out));
+  TEST_ASSERT_EQUAL_UINT8(2, out.count);
+  TEST_ASSERT_EQUAL(SettingCommand::kNone, parseWindowsCommand("PLAGESX", out));
+  TEST_ASSERT_EQUAL(SettingCommand::kNone, parseWindowsCommand("MODE PLAGES", out));
+  TEST_ASSERT_EQUAL(SettingCommand::kNone, parseWindowsCommand(nullptr, out));
+}
+
+// ADR-heure-par-ntp: FUSEAU shows or replaces the time zone.
+void test_parses_the_timezone_command() {
+  char out[terrarium::control::kTimezoneSize] = "UTC0";
+  TEST_ASSERT_EQUAL(SettingCommand::kShow, parseTimezoneCommand("FUSEAU", out));
+  TEST_ASSERT_EQUAL_STRING("UTC0", out);
+  TEST_ASSERT_EQUAL(SettingCommand::kSet,
+                    parseTimezoneCommand("FUSEAU CET-1CEST,M3.5.0,M10.5.0/3\r", out));
+  TEST_ASSERT_EQUAL_STRING("CET-1CEST,M3.5.0,M10.5.0/3", out);
+  TEST_ASSERT_EQUAL(SettingCommand::kInvalid, parseTimezoneCommand("FUSEAU Europe/Paris", out));
+  TEST_ASSERT_EQUAL(SettingCommand::kInvalid, parseTimezoneCommand("FUSEAU ", out));
+  TEST_ASSERT_EQUAL_STRING("CET-1CEST,M3.5.0,M10.5.0/3", out);
+  TEST_ASSERT_EQUAL(SettingCommand::kNone, parseTimezoneCommand("FUSEAUX", out));
+  TEST_ASSERT_EQUAL(SettingCommand::kNone, parseTimezoneCommand(nullptr, out));
+}
+
+void test_parses_the_schedule_mode_command() {
+  Mode out = Mode::kMaintenance;
+  TEST_ASSERT_TRUE(parseModeCommand("MODE PLAGES", out));
+  TEST_ASSERT_EQUAL(Mode::kSchedule, out);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_parses_each_mode_command);
   RUN_TEST(test_ignores_a_trailing_carriage_return);
   RUN_TEST(test_rejects_anything_else_and_leaves_mode_untouched);
   RUN_TEST(test_parses_the_portal_command);
+  RUN_TEST(test_parses_the_windows_command);
+  RUN_TEST(test_rejects_a_bad_windows_command);
+  RUN_TEST(test_parses_the_timezone_command);
+  RUN_TEST(test_parses_the_schedule_mode_command);
   return UNITY_END();
 }

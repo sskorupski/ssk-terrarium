@@ -20,7 +20,7 @@ pio run -e esp32dev     # compilation pour l'ESP32
 pio run -e esp32dev -t upload && pio device monitor
 ```
 
-Sur la liaison série (115 200 bauds), `MODE ACTIF`, `MODE HIBERNATION` ou `MODE MAINTENANCE` change de mode ; le mode est conservé à travers les coupures de courant.
+Sur la liaison série (115 200 bauds), `MODE ACTIF`, `MODE PLAGES`, `MODE HIBERNATION` ou `MODE MAINTENANCE` change de mode ; le mode est conservé à travers les coupures de courant. `PLAGES` chauffe sur la consigne pendant des plages horaires et tient 12 °C en dehors : voir [docs/mode-plages.md](docs/mode-plages.md).
 
 ## Monter le régulateur
 

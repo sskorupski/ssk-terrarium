@@ -10,12 +10,14 @@ enum class Mode : uint8_t {
   kActive,       // ACTIF: setpoint heating, misting, light schedule.
   kHibernation,  // HIBERNATION: frost protection only.
   kMaintenance,  // MAINTENANCE: everything off, measurements only.
+  kSchedule,     // PLAGES: setpoint heating in time windows, floor outside.
 };
 
 enum class HeatingPolicy : uint8_t {
   kOff,
   kSetpoint,         // Regulate around the configured setpoint.
   kFrostProtection,  // Regulate in the frost band only.
+  kSchedule,         // Setpoint in a time window, floor band outside (RG-chauffage-par-plages).
 };
 
 struct ModePolicy {
@@ -27,7 +29,8 @@ struct ModePolicy {
 // Policy of a mode. Constant per mode, independent of the network.
 ModePolicy policyFor(Mode mode);
 
-// Wire names used by MQTT and the web page: "ACTIF", "HIBERNATION", "MAINTENANCE".
+// Wire names used by MQTT and the web page: "ACTIF", "HIBERNATION", "MAINTENANCE",
+// "PLAGES".
 const char* toString(Mode mode);
 
 // Parses a wire name (exact, case-sensitive). Returns false and leaves `out`

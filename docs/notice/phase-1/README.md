@@ -257,7 +257,7 @@ Sur le module relais KW-1613 (**E**), le relais 1 est marqué `K1`, tout à droi
 
 La phase est terminée quand les dix étapes donnent ce qu'elles annoncent. Reporter dans le cadrage du projet le résultat de l'étape 4 (module à déclenchement bas, ou non) et la température de vitre mesurée à l'étape 10.
 
-L'hiver, laisser le régulateur en `ACTIF` pour l'élevage, ou en `HIBERNATION` pour la mise au repos : le mode survit aux coupures de courant.
+L'hiver, laisser le régulateur en `ACTIF` pour l'élevage, ou en `HIBERNATION` pour la mise au repos : le mode survit aux coupures de courant. Une fois le Wi-Fi configuré ([supervision.md](../../supervision.md)), le mode `PLAGES` chauffe sur la consigne aux heures choisies et tient 12 °C le reste du temps ([mode-plages.md](../../mode-plages.md)).
 
 ## Crédits des illustrations
 
