@@ -7,17 +7,17 @@ metadata:
 
 connectors:
   CORDON:
-    type: Cordon secteur 3G 1 mm² avec fiche
+    type: (N) Cordon secteur 3G 1 mm² avec fiche
     pinlabels: [Phase, Neutre, Terre]
   FUSIBLE:
-    type: Porte-fusible 5 × 20
+    type: (P) Porte-fusible 5 × 20
     subtype: fusible 1 A temporisé
     pinlabels: [Entrée, Sortie]
   RELAIS1:
-    type: Relais 1 du module (chauffage)
+    type: (E) Relais 1 du module (chauffage)
     pinlabels: [COM, "NO", NC (libre)]
   SOCLE:
-    type: Socle de prise femelle
+    type: (Q) Socle de prise femelle
     subtype: reçoit le limiteur Exo Terra 24 °C
     pinlabels: ["L", "N", Terre]
 

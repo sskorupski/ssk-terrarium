@@ -13,7 +13,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Cordon secteur 3G 1 mm² avec fiche</td>
+   <td balign="left">(N) Cordon secteur 3G 1 mm² avec fiche</td>
    <td balign="left">3-pin</td>
   </tr></table>
  </td></tr>
@@ -44,7 +44,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Porte-fusible 5 × 20</td>
+   <td balign="left">(P) Porte-fusible 5 × 20</td>
    <td balign="left">fusible 1 A temporisé</td>
    <td balign="left">2-pin</td>
   </tr></table>
@@ -74,7 +74,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Socle de prise femelle</td>
+   <td balign="left">(Q) Socle de prise femelle</td>
    <td balign="left">reçoit le limiteur Exo Terra 24 °C</td>
    <td balign="left">3-pin</td>
   </tr></table>
@@ -106,7 +106,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Relais 1 du module (chauffage)</td>
+   <td balign="left">(E) Relais 1 du module (chauffage)</td>
    <td balign="left">3-pin</td>
   </tr></table>
  </td></tr>

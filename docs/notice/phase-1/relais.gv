@@ -13,18 +13,19 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Carte Keyestudio KS5016</td>
+   <td balign="left">(A) Carte Keyestudio KS5016</td>
+   <td balign="left">3,3 V et GND : colonnes V et G du bloc ANALOG</td>
    <td balign="left">6-pin</td>
   </tr></table>
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
    <tr>
-    <td>3V3</td>
+    <td>Rangée 3,3 V</td>
     <td port="p1r">1</td>
    </tr>
    <tr>
-    <td>GND</td>
+    <td>Rangée GND</td>
     <td port="p2r">2</td>
    </tr>
    <tr>
@@ -47,36 +48,6 @@ graph {
  </td></tr>
 </table>
 > fillcolor="#FFFFFF" shape=box style=filled]
-	PLAQUE [label=<
-<table border="0" cellspacing="0" cellpadding="0">
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">PLAQUE</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Mini plaque d'essai</td>
-   <td balign="left">deux lignes de répartition</td>
-   <td balign="left">2-pin</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
-   <tr>
-    <td port="p1l">1</td>
-    <td>Ligne 3,3 V</td>
-    <td port="p1r">1</td>
-   </tr>
-   <tr>
-    <td port="p2l">2</td>
-    <td>Ligne GND</td>
-    <td port="p2r">2</td>
-   </tr>
-  </table>
- </td></tr>
-</table>
-> fillcolor="#FFFFFF" shape=box style=filled]
 	COMMANDES [label=<
 <table border="0" cellspacing="0" cellpadding="0">
  <tr><td>
@@ -86,7 +57,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Module relais, rangée des commandes</td>
+   <td balign="left">(E) Module relais, rangée des commandes</td>
    <td balign="left">6-pin</td>
   </tr></table>
  </td></tr>
@@ -129,18 +100,18 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Sortie du LM2596 (5,0 V)</td>
+   <td balign="left">(H) Sortie de l'abaisseur 5 V (LM2596, 5,0 V)</td>
    <td balign="left">2-pin</td>
   </tr></table>
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
    <tr>
-    <td>OUT+</td>
+    <td>VOUT+</td>
     <td port="p1r">1</td>
    </tr>
    <tr>
-    <td>OUT−</td>
+    <td>VOUT−</td>
     <td port="p2r">2</td>
    </tr>
   </table>
@@ -156,7 +127,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Module relais, rangée JD-VCC</td>
+   <td balign="left">(E) Module relais, rangée JD-VCC</td>
    <td balign="left">cavalier retiré</td>
    <td balign="left">3-pin</td>
   </tr></table>
@@ -181,10 +152,10 @@ graph {
 > fillcolor="#FFFFFF" shape=box style=filled]
 	edge [color="#000000:#ff0000:#000000"]
 	KS5016:p1r:e -- W1:w1:w
-	W1:w1:e -- PLAQUE:p1l:w
+	W1:w1:e -- COMMANDES:p6l:w
 	edge [color="#000000:#000000:#000000"]
 	KS5016:p2r:e -- W1:w2:w
-	W1:w2:e -- PLAQUE:p2l:w
+	W1:w2:e -- COMMANDES:p1l:w
 	W1 [label=<
 <table border="0" cellspacing="0" cellpadding="0">
  <tr><td>
@@ -194,7 +165,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Fils Dupont</td>
+   <td balign="left">(L) Fils Dupont</td>
    <td balign="left">2x</td>
   </tr></table>
  </td></tr>
@@ -202,66 +173,7 @@ graph {
   <table border="0" cellspacing="0" cellborder="0">
    <tr><td>&nbsp;</td></tr>
    <tr>
-    <td>KS5016:1:3V3</td>
-    <td>
-     RD
-    </td>
-    <td>PLAQUE:1:Ligne 3,3 V</td>
-   </tr>
-   <tr>
-    <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w1" height="6">
-     <table cellspacing="0" cellborder="0" border="0">
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#ff0000" border="0"></td></tr>
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
-     </table>
-    </td>
-   </tr>
-   <tr>
-    <td>KS5016:2:GND</td>
-    <td>
-     BK
-    </td>
-    <td>PLAQUE:2:Ligne GND</td>
-   </tr>
-   <tr>
-    <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w2" height="6">
-     <table cellspacing="0" cellborder="0" border="0">
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
-      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
-     </table>
-    </td>
-   </tr>
-   <tr><td>&nbsp;</td></tr>
-  </table>
- </td></tr>
-</table>
-> fillcolor="#FFFFFF" shape=box style="filled,dashed"]
-	edge [color="#000000:#ff0000:#000000"]
-	PLAQUE:p1r:e -- W2:w1:w
-	W2:w1:e -- COMMANDES:p6l:w
-	edge [color="#000000:#000000:#000000"]
-	PLAQUE:p2r:e -- W2:w2:w
-	W2:w2:e -- COMMANDES:p1l:w
-	W2 [label=<
-<table border="0" cellspacing="0" cellpadding="0">
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">W2</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Fils Dupont</td>
-   <td balign="left">2x</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellborder="0">
-   <tr><td>&nbsp;</td></tr>
-   <tr>
-    <td>PLAQUE:1:Ligne 3,3 V</td>
+    <td>KS5016:1:Rangée 3,3 V</td>
     <td>
      RD
     </td>
@@ -277,7 +189,7 @@ graph {
     </td>
    </tr>
    <tr>
-    <td>PLAQUE:2:Ligne GND</td>
+    <td>KS5016:2:Rangée GND</td>
     <td>
      BK
     </td>
@@ -318,7 +230,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Fils Dupont</td>
+   <td balign="left">(L) Fils Dupont</td>
    <td balign="left">4x</td>
   </tr></table>
  </td></tr>
@@ -409,7 +321,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Fil souple</td>
+   <td balign="left">(L) Fils Dupont mâle/femelle</td>
    <td balign="left">2x</td>
   </tr></table>
  </td></tr>
@@ -417,7 +329,7 @@ graph {
   <table border="0" cellspacing="0" cellborder="0">
    <tr><td>&nbsp;</td></tr>
    <tr>
-    <td>LM2596:1:OUT+</td>
+    <td>LM2596:1:VOUT+</td>
     <td>
      RD
     </td>
@@ -433,7 +345,7 @@ graph {
     </td>
    </tr>
    <tr>
-    <td>LM2596:2:OUT−</td>
+    <td>LM2596:2:VOUT−</td>
     <td>
      BK
     </td>
@@ -450,6 +362,11 @@ graph {
    </tr>
    <tr><td>&nbsp;</td></tr>
   </table>
+ </td></tr>
+ <tr><td>
+  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
+   <td balign="left">broche mâle sous la vis VOUT, embout femelle sur le picot</td>
+  </tr></table>
  </td></tr>
 </table>
 > fillcolor="#FFFFFF" shape=box style="filled,dashed"]

@@ -32,6 +32,7 @@ Le vocabulaire du cœur est celui du domaine — mode, consigne, hors-gel, défa
 - Une situation normale ne s'affiche jamais comme une erreur. Le premier démarrage écrit `INFO aucun mode enregistre, demarrage en MAINTENANCE`, et non le `nvs_open failed: NOT_FOUND` de la bibliothèque `Preferences` : un message de bibliothèque ou du cœur Arduino qui sort dans un cas normal s'évite à la source, et le firmware dit lui-même ce qu'il en est.
 - Un `ERREUR` dit ce qui était attendu : `ERREUR commande inconnue (MODE ACTIF|HIBERNATION|MAINTENANCE)`.
 - Les textes s'écrivent sans accents, pour qu'un terminal mal réglé les affiche intacts.
+- Chaque ligne se termine par `\r\n`, comme le fait `Serial.println` : un `Serial.printf` finit donc par `\r\n`, jamais par `\n` seul. Sans le retour chariot, un terminal comme celui de la notice descend d'une ligne sans revenir à gauche, et le journal part en escalier.
 - Chaque message figure dans la liste des sorties de `docs/developpement.md`, et dans la notice dès qu'une étape demande de l'observer.
 
 ## Interface web (à partir de la phase 2)
@@ -60,3 +61,11 @@ Le tag est le seul repère d'une personne qui reprend le projet : la notice qu'e
 **Toute valeur de résistance s'écrit avec son code couleur entre parenthèses**, dans la notice comme dans son schéma WireViz : « 330 Ω (orange, orange, marron, or) ». Quand le kit fourni risque de contenir des résistances à 5 anneaux (1 %, corps souvent bleu), la variante s'ajoute : « ou orange, orange, noir, noir, marron sur une résistance à 5 anneaux ». Qui monte trie ses résistances à l'œil, dans un sachet mélangé ; une valeur seule l'oblige à décoder les anneaux ou à sortir le multimètre, et une erreur d'un facteur dix — 330 Ω pour 3,3 kΩ — ne se voit qu'une fois le montage sous tension.
 
 **Un élément facultatif le dit**, avec ce qui le remplace pour vérifier l'étape, et la phase à partir de laquelle il devient nécessaire.
+
+**Une pièce se nomme par ce qu'elle est et ce qu'elle fait, pas par sa référence d'achat.** « L'adaptateur jack à vis », « l'abaisseur 5 V », « la prise murale » — non « l'embase à bornier », « le LM2596 », « le secteur ». La liste du matériel décrit chaque pièce assez pour la reconnaître sur la table (forme, repères imprimés), et garde la référence pour l'acheter ; la notice reprend ensuite toujours le même nom. Un repère imprimé se cite tel qu'il figure sur la pièce, avec ses variantes connues (`VIN+` ou `IN+`).
+
+**Un état se décrit par ce qu'on débranche, jamais par « tout débranché »** : « bloc 12 V débranché de la prise murale et câble USB débranché », avec ce qui reste en place des étapes précédentes. « Tout débranché » laisse croire qu'il faut défaire le montage.
+
+**Chaque pièce porte un repère, comme dans une notice de meuble** : une lettre majuscule dans la liste du matériel, sans I ni O, qu'on confondrait avec 1 et 0. Chaque étape commence par la liste des repères qu'elle utilise ; le texte cite le repère entre parenthèses à la première mention de la pièce dans l'étape, « l'abaisseur 5 V (**H**) », et les schémas WireViz le portent en tête du nom de la pièce. Un repère reste attaché à sa pièce d'une phase à l'autre.
+
+**Une illustration de pièce vient d'une source sous licence libre**, CC0, domaine public, CC BY ou CC BY-SA — Wikimedia Commons, les bibliothèques Fritzing —, jamais d'une page de vendeur : le dépôt est public. Elle se range dans `illustrations/<repère>` à côté de la notice, réduite à 320 px de large, et se crédite en fin de notice, auteur, licence et lien vers la source. Quand elle ne montre pas exactement le modèle acheté, la description le dit ; une pièce sans image libre fidèle reste sans illustration.

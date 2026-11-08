@@ -6,14 +6,14 @@ metadata:
 
 connectors:
   EMBASE:
-    type: Embase jack femelle 5,5 × 2,1 à bornier
+    type: (G) Adaptateur jack à vis (embase jack femelle 5,5 × 2,1)
     subtype: fiche du bloc 12 V enfoncée
     pinlabels: [+ (12 V), −]
   LM2596:
-    type: Abaisseur LM2596, réglé à 5,0 V à vide
-    pinlabels: [IN+, IN−, OUT+, OUT−]
+    type: (H) Abaisseur 5 V (LM2596), réglé à 5,0 V à vide
+    pinlabels: [VIN+, VIN−, VOUT+, VOUT−]
   KS5016:
-    type: Carte Keyestudio KS5016
+    type: (A) Carte Keyestudio KS5016
     subtype: jack d'alimentation, centre +
     pinlabels: [Centre (+12 V), Manchon (−)]
 
@@ -22,12 +22,12 @@ cables:
     wirecount: 2
     colors: [RD, BK]
     category: bundle
-    type: Fil souple
+    type: (M) Fil souple
   W2:
     wirecount: 2
     colors: [RD, BK]
     category: bundle
-    type: Cordon jack mâle 5,5 × 2,1 (étape 8)
+    type: (J) Cordon jack 5,5 × 2,1 (étape 8)
 
 connections:
   - - EMBASE: [1, 2]

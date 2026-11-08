@@ -160,7 +160,7 @@ void reportMeasures(const terrarium::sensors::AirReading& air,
   } else {
     Serial.print("--");
   }
-  Serial.printf(" chauffage=%d mode=%s\n", outputs.state().heater ? 1 : 0,
+  Serial.printf(" chauffage=%d mode=%s\r\n", outputs.state().heater ? 1 : 0,
                 terrarium::control::toString(modeMachine.mode()));
 }
 
@@ -173,7 +173,7 @@ void restoreMode() {
   } else {
     Serial.println("INFO aucun mode enregistre, demarrage en MAINTENANCE");
   }
-  Serial.printf("MODE %s au demarrage\n", terrarium::control::toString(modeMachine.mode()));
+  Serial.printf("MODE %s au demarrage\r\n", terrarium::control::toString(modeMachine.mode()));
 }
 
 void handleSerialLine(const char* line) {
@@ -186,11 +186,11 @@ void handleSerialLine(const char* line) {
   // command still shows that the board answered.
   const char* name = terrarium::control::toString(target);
   if (!modeMachine.request(target)) {
-    Serial.printf("MODE %s deja actif\n", name);
+    Serial.printf("MODE %s deja actif\r\n", name);
   } else if (settingsStore.saveMode(terrarium::control::modeToStored(target))) {
-    Serial.printf("MODE %s enregistre, conserve apres coupure\n", name);
+    Serial.printf("MODE %s enregistre, conserve apres coupure\r\n", name);
   } else {
-    Serial.printf("ERREUR mode %s applique mais non enregistre, perdu a la prochaine coupure\n",
+    Serial.printf("ERREUR mode %s applique mais non enregistre, perdu a la prochaine coupure\r\n",
                   name);
   }
 }

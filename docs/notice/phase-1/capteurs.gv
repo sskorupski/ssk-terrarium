@@ -4,29 +4,41 @@ graph {
 	graph [bgcolor="#FFFFFF" fontname=arial nodesep=0.33 rankdir=LR ranksep=2]
 	node [fillcolor="#FFFFFF" fontname=arial height=0 margin=0 shape=none style=filled width=0]
 	edge [fontname=arial style=bold]
-	PLAQUE [label=<
+	KS5016 [label=<
 <table border="0" cellspacing="0" cellpadding="0">
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">PLAQUE</td>
+   <td balign="left">KS5016</td>
   </tr></table>
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Mini plaque d'essai</td>
-   <td balign="left">lignes de l'étape 4</td>
-   <td balign="left">2-pin</td>
+   <td balign="left">(A) Carte Keyestudio KS5016</td>
+   <td balign="left">3,3 V et GND : colonnes V et G du bloc ANALOG</td>
+   <td balign="left">5-pin</td>
   </tr></table>
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
    <tr>
-    <td>Ligne 3,3 V</td>
+    <td>GPIO 21 (SDA)</td>
     <td port="p1r">1</td>
    </tr>
    <tr>
-    <td>Ligne GND</td>
+    <td>GPIO 22 (SCL)</td>
     <td port="p2r">2</td>
+   </tr>
+   <tr>
+    <td>GPIO 4</td>
+    <td port="p3r">3</td>
+   </tr>
+   <tr>
+    <td>Rangée 3,3 V</td>
+    <td port="p4r">4</td>
+   </tr>
+   <tr>
+    <td>Rangée GND</td>
+    <td port="p5r">5</td>
    </tr>
   </table>
  </td></tr>
@@ -41,7 +53,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Capteur d'air Adafruit SHT45</td>
+   <td balign="left">(B) Capteur d'air Adafruit SHT45</td>
    <td balign="left">connecteur STEMMA QT</td>
    <td balign="left">4-pin</td>
   </tr></table>
@@ -68,37 +80,6 @@ graph {
  </td></tr>
 </table>
 > fillcolor="#FFFFFF" shape=box style=filled]
-	KS5016 [label=<
-<table border="0" cellspacing="0" cellpadding="0">
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">KS5016</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Carte Keyestudio KS5016</td>
-   <td balign="left">3-pin</td>
-  </tr></table>
- </td></tr>
- <tr><td>
-  <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
-   <tr>
-    <td>GPIO 21 (SDA)</td>
-    <td port="p1r">1</td>
-   </tr>
-   <tr>
-    <td>GPIO 22 (SCL)</td>
-    <td port="p2r">2</td>
-   </tr>
-   <tr>
-    <td>GPIO 4</td>
-    <td port="p3r">3</td>
-   </tr>
-  </table>
- </td></tr>
-</table>
-> fillcolor="#FFFFFF" shape=box style=filled]
 	ADAPTATRICE [label=<
 <table border="0" cellspacing="0" cellpadding="0">
  <tr><td>
@@ -108,8 +89,8 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Carte adaptatrice de la DS18B20</td>
-   <td balign="left">résistance de tirage de 4,7 kΩ intégrée</td>
+   <td balign="left">(D) Carte adaptatrice de la DS18B20</td>
+   <td balign="left">Plugable Terminal V2, cavalier sur PULL UP (10 kΩ)</td>
    <td balign="left">3-pin</td>
   </tr></table>
  </td></tr>
@@ -117,11 +98,11 @@ graph {
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
    <tr>
     <td port="p1l">1</td>
-    <td>GND (−)</td>
+    <td>−</td>
    </tr>
    <tr>
     <td port="p2l">2</td>
-    <td>VCC (+)</td>
+    <td>+</td>
    </tr>
    <tr>
     <td port="p3l">3</td>
@@ -132,10 +113,10 @@ graph {
 </table>
 > fillcolor="#FFFFFF" shape=box style=filled]
 	edge [color="#000000:#000000:#000000"]
-	PLAQUE:p2r:e -- QT:w1:w
+	KS5016:p5r:e -- QT:w1:w
 	QT:w1:e -- SHT45:p1l:w
 	edge [color="#000000:#ff0000:#000000"]
-	PLAQUE:p1r:e -- QT:w2:w
+	KS5016:p4r:e -- QT:w2:w
 	QT:w2:e -- SHT45:p2l:w
 	edge [color="#000000:#0066ff:#000000"]
 	KS5016:p1r:e -- QT:w3:w
@@ -152,7 +133,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Câble STEMMA QT + fils Dupont</td>
+   <td balign="left">(B) Câble STEMMA QT + fils Dupont</td>
    <td balign="left">4x</td>
   </tr></table>
  </td></tr>
@@ -160,7 +141,7 @@ graph {
   <table border="0" cellspacing="0" cellborder="0">
    <tr><td>&nbsp;</td></tr>
    <tr>
-    <td>PLAQUE:2:Ligne GND</td>
+    <td>KS5016:5:Rangée GND</td>
     <td>
      BK
     </td>
@@ -176,7 +157,7 @@ graph {
     </td>
    </tr>
    <tr>
-    <td>PLAQUE:1:Ligne 3,3 V</td>
+    <td>KS5016:4:Rangée 3,3 V</td>
     <td>
      RD
     </td>
@@ -229,10 +210,10 @@ graph {
 </table>
 > fillcolor="#FFFFFF" shape=box style="filled,dashed"]
 	edge [color="#000000:#000000:#000000"]
-	PLAQUE:p2r:e -- W2:w1:w
+	KS5016:p5r:e -- W2:w1:w
 	W2:w1:e -- ADAPTATRICE:p1l:w
 	edge [color="#000000:#ff0000:#000000"]
-	PLAQUE:p1r:e -- W2:w2:w
+	KS5016:p4r:e -- W2:w2:w
 	W2:w2:e -- ADAPTATRICE:p2l:w
 	edge [color="#000000:#00ff00:#000000"]
 	KS5016:p3r:e -- W2:w3:w
@@ -246,7 +227,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Fils Dupont</td>
+   <td balign="left">(L) Fils Dupont</td>
    <td balign="left">3x</td>
   </tr></table>
  </td></tr>
@@ -254,11 +235,11 @@ graph {
   <table border="0" cellspacing="0" cellborder="0">
    <tr><td>&nbsp;</td></tr>
    <tr>
-    <td>PLAQUE:2:Ligne GND</td>
+    <td>KS5016:5:Rangée GND</td>
     <td>
      BK
     </td>
-    <td>ADAPTATRICE:1:GND (−)</td>
+    <td>ADAPTATRICE:1:−</td>
    </tr>
    <tr>
     <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w1" height="6">
@@ -270,11 +251,11 @@ graph {
     </td>
    </tr>
    <tr>
-    <td>PLAQUE:1:Ligne 3,3 V</td>
+    <td>KS5016:4:Rangée 3,3 V</td>
     <td>
      RD
     </td>
-    <td>ADAPTATRICE:2:VCC (+)</td>
+    <td>ADAPTATRICE:2:+</td>
    </tr>
    <tr>
     <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w2" height="6">

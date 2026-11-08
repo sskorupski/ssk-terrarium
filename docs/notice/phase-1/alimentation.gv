@@ -13,7 +13,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Embase jack femelle 5,5 × 2,1 à bornier</td>
+   <td balign="left">(G) Adaptateur jack à vis (embase jack femelle 5,5 × 2,1)</td>
    <td balign="left">fiche du bloc 12 V enfoncée</td>
    <td balign="left">2-pin</td>
   </tr></table>
@@ -41,7 +41,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Abaisseur LM2596, réglé à 5,0 V à vide</td>
+   <td balign="left">(H) Abaisseur 5 V (LM2596), réglé à 5,0 V à vide</td>
    <td balign="left">4-pin</td>
   </tr></table>
  </td></tr>
@@ -49,19 +49,19 @@ graph {
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
    <tr>
     <td port="p1l">1</td>
-    <td>IN+</td>
+    <td>VIN+</td>
    </tr>
    <tr>
     <td port="p2l">2</td>
-    <td>IN−</td>
+    <td>VIN−</td>
    </tr>
    <tr>
     <td port="p3l">3</td>
-    <td>OUT+</td>
+    <td>VOUT+</td>
    </tr>
    <tr>
     <td port="p4l">4</td>
-    <td>OUT−</td>
+    <td>VOUT−</td>
    </tr>
   </table>
  </td></tr>
@@ -76,7 +76,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Carte Keyestudio KS5016</td>
+   <td balign="left">(A) Carte Keyestudio KS5016</td>
    <td balign="left">jack d'alimentation, centre +</td>
    <td balign="left">2-pin</td>
   </tr></table>
@@ -110,7 +110,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Fil souple</td>
+   <td balign="left">(M) Fil souple</td>
    <td balign="left">2x</td>
   </tr></table>
  </td></tr>
@@ -122,7 +122,7 @@ graph {
     <td>
      RD
     </td>
-    <td>LM2596:1:IN+</td>
+    <td>LM2596:1:VIN+</td>
    </tr>
    <tr>
     <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w1" height="6">
@@ -138,7 +138,7 @@ graph {
     <td>
      BK
     </td>
-    <td>LM2596:2:IN−</td>
+    <td>LM2596:2:VIN−</td>
    </tr>
    <tr>
     <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w2" height="6">
@@ -169,7 +169,7 @@ graph {
  </td></tr>
  <tr><td>
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
-   <td balign="left">Cordon jack mâle 5,5 × 2,1 (étape 8)</td>
+   <td balign="left">(J) Cordon jack 5,5 × 2,1 (étape 8)</td>
    <td balign="left">2x</td>
   </tr></table>
  </td></tr>

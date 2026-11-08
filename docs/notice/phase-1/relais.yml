@@ -6,51 +6,41 @@ metadata:
 
 connectors:
   KS5016:
-    type: Carte Keyestudio KS5016
-    pinlabels: [3V3, GND, GPIO 26, GPIO 27, GPIO 25, GPIO 33]
-  PLAQUE:
-    type: Mini plaque d'essai
-    subtype: deux lignes de répartition
-    pinlabels: ["Ligne 3,3 V", Ligne GND]
+    type: (A) Carte Keyestudio KS5016
+    subtype: "3,3 V et GND : colonnes V et G du bloc ANALOG"
+    pinlabels: ["Rangée 3,3 V", Rangée GND, GPIO 26, GPIO 27, GPIO 25, GPIO 33]
   COMMANDES:
-    type: Module relais, rangée des commandes
+    type: (E) Module relais, rangée des commandes
     pinlabels: [GND, IN1 (chauffage), IN2 (LED), IN3 (pompe), IN4 (ventilateur), VCC]
   BOBINES:
-    type: Module relais, rangée JD-VCC
+    type: (E) Module relais, rangée JD-VCC
     subtype: cavalier retiré
     pinlabels: [VCC (libre), JD-VCC, GND]
   LM2596:
-    type: Sortie du LM2596 (5,0 V)
-    pinlabels: [OUT+, OUT−]
+    type: (H) Sortie de l'abaisseur 5 V (LM2596, 5,0 V)
+    pinlabels: [VOUT+, VOUT−]
 
 cables:
   W1:
     wirecount: 2
     colors: [RD, BK]
     category: bundle
-    type: Fils Dupont
-  W2:
-    wirecount: 2
-    colors: [RD, BK]
-    category: bundle
-    type: Fils Dupont
+    type: (L) Fils Dupont
   W3:
     wirecount: 4
     colors: [BN, OG, YE, GN]
     category: bundle
-    type: Fils Dupont
+    type: (L) Fils Dupont
   W4:
     wirecount: 2
     colors: [RD, BK]
     category: bundle
-    type: Fil souple
+    type: (L) Fils Dupont mâle/femelle
+    notes: broche mâle sous la vis VOUT, embout femelle sur le picot
 
 connections:
   - - KS5016: [1, 2]
     - W1: [1, 2]
-    - PLAQUE: [1, 2]
-  - - PLAQUE: [1, 2]
-    - W2: [1, 2]
     - COMMANDES: [6, 1]
   - - KS5016: [3, 4, 5, 6]
     - W3: [1, 2, 3, 4]
