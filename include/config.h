@@ -72,6 +72,12 @@ constexpr uint32_t kHeatContinuousMaxMs = 2UL * 60UL * 60UL * 1000UL;
 // Off time after the continuous-heat cap, then heating resumes on its own.
 constexpr uint32_t kHeatPauseMs = 15UL * 60UL * 1000UL;
 constexpr uint32_t kSensorSilentMaxMs = 2UL * 60UL * 1000UL;
+// Substrate cut (cadrage 2026-005, RG-coupure-par-le-substrat): heating off
+// once the substrate reaches kSubstrateCutAtC, until it falls strictly below
+// kSubstrateResumeBelowC. Fixed, whatever the setpoint; a probe silent for
+// kSensorSilentMaxMs lifts the cut.
+constexpr float kSubstrateCutAtC = 24.0f;
+constexpr float kSubstrateResumeBelowC = 18.5f;
 
 // --- Bounds of the remote settings (RG-reglages-bornes), never overridable ----
 // A setpoint or hysteresis received from the network, or read back from NVS,
@@ -108,6 +114,7 @@ static_assert(kHeatHysteresisMinC <= kHeatHysteresisC && kHeatHysteresisC <= kHe
 static_assert(kFloorHeatOnBelowC < kFloorHeatOffAtC, "floor band must not be empty");
 static_assert(kFrostHeatOffAtC < kFloorHeatOnBelowC, "floor band overlaps frost protection");
 static_assert(kFloorHeatOffAtC < kAlertTempHighC, "floor band reaches the high alert threshold");
+static_assert(kSubstrateResumeBelowC < kSubstrateCutAtC, "substrate cut band must not be empty");
 static_assert(kDefaultTimeWindowCount <= 4, "at most four windows");
 static_assert(kSetpointMinC - kHeatHysteresisMaxC > kFrostHeatOffAtC,
               "lowest active band overlaps frost protection");

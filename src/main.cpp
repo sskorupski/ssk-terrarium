@@ -26,6 +26,7 @@
 #include "serial_command.h"
 #include "settings_store.h"
 #include "state_message.h"
+#include "substrate_cap.h"
 #include "substrate_sensor.h"
 #include "supervisor.h"
 #include "time_windows.h"
@@ -46,6 +47,7 @@ using terrarium::control::ScheduledHeating;
 using terrarium::control::SensorHealth;
 using terrarium::control::SensorWatch;
 using terrarium::control::SettingCommand;
+using terrarium::control::SubstrateCapChange;
 using terrarium::control::TimeWindows;
 
 namespace {
@@ -68,6 +70,8 @@ terrarium::alerts::Notifier notifier;
 ModeMachine modeMachine(kFallbackBootMode);
 SensorWatch airWatch(cfg::kSensorSilentMaxMs);
 HeatGuard heatGuard(cfg::kHeatContinuousMaxMs, cfg::kHeatPauseMs);
+terrarium::control::SubstrateCap substrateCap(cfg::kSubstrateCutAtC, cfg::kSubstrateResumeBelowC,
+                                              cfg::kSensorSilentMaxMs);
 // Bounds of the settings received from the network (RG-reglages-bornes).
 constexpr terrarium::control::HeatSettingsBounds kHeatBounds{
     cfg::kSetpointMinC, cfg::kSetpointMaxC, cfg::kHeatHysteresisMinC, cfg::kHeatHysteresisMaxC,
@@ -207,8 +211,10 @@ bool scheduledHeater(SensorHealth health, float temperatureC) {
 
 // One regulation step. Misting, light and fan stay off in phase 1
 // (RG-sorties-par-mode); an air sensor in fault switches heating off, and so
-// does heating for too long (RG-chauffe-continue-bornee).
-void regulate(const terrarium::sensors::AirReading& air, uint32_t nowMs) {
+// do a hot substrate (RG-coupure-par-le-substrat) and heating for too long
+// (RG-chauffe-continue-bornee).
+void regulate(const terrarium::sensors::AirReading& air,
+              const terrarium::sensors::SubstrateReading& substrate, uint32_t nowMs) {
   const SensorHealth previous = airWatch.health();
   const SensorHealth health =
       airWatch.update(nowMs, air.valid && terrarium::control::isPlausibleAirReading(
@@ -241,6 +247,22 @@ void regulate(const terrarium::sensors::AirReading& air, uint32_t nowMs) {
       floorHeating.reset();
       break;
   }
+
+  // Before the guard: a cut heater does not count as continuous heating.
+  switch (substrateCap.update(nowMs, substrate.valid, substrate.temperatureC)) {
+    case SubstrateCapChange::kCut:
+      Serial.printf("COUPURE chauffage : substrat a %.1f C\r\n", substrate.temperatureC);
+      break;
+    case SubstrateCapChange::kResumedCold:
+      Serial.printf("REPRISE chauffage : substrat a %.1f C\r\n", substrate.temperatureC);
+      break;
+    case SubstrateCapChange::kResumedSilent:
+      Serial.println("REPRISE chauffage : sonde substrat muette");
+      break;
+    case SubstrateCapChange::kNone:
+      break;
+  }
+  if (substrateCap.cut()) next.heater = false;
 
   const bool wasPaused = heatGuard.paused();
   next.heater = heatGuard.filter(nowMs, next.heater);
@@ -303,6 +325,7 @@ void publishState(const terrarium::sensors::AirReading& air,
   snapshot.hysteresisC = heatSettings.hysteresisC;
   snapshot.sensorFault = airWatch.health() == SensorHealth::kFault;
   snapshot.heatPaused = heatGuard.paused();
+  snapshot.substrateCut = substrateCap.cut();
   snapshot.uptimeS = nowMs / 1000;
   snapshot.firmwareVersion = FIRMWARE_VERSION;
   snapshot.windows = timeWindows;
@@ -610,8 +633,8 @@ void loop() {
     firstReadDone = true;
     lastSensorReadMs = nowMs;
     const terrarium::sensors::AirReading air = airSensor.read();
-    regulate(air, nowMs);
     const terrarium::sensors::SubstrateReading substrate = substrateSensor.read();
+    regulate(air, substrate, nowMs);
     reportMeasures(air, substrate);
     publishState(air, substrate, nowMs);
   }

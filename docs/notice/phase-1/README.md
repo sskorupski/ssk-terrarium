@@ -181,15 +181,17 @@ Les valeurs ressemblent à la pièce : une température proche de celle d'un the
 
 ## Étape 7 — Vérifier la régulation et le défaut capteur
 
-*Pièces : A, B.*
+*Pièces : A, B, C.*
 
-En mode `ACTIF`, le chauffage s'allume sous 18,5 °C et s'éteint à 19,5 °C. Les mesures arrivent toutes les 30 secondes : chaque effet attendu peut prendre ce délai.
+En mode `ACTIF`, le chauffage s'allume sous 18,5 °C et s'éteint à 19,5 °C. Quel que soit l'air, il se coupe dès que la sonde du substrat atteint 24 °C, et reste coupé jusqu'à ce qu'elle redescende sous 18,5 °C. Les mesures arrivent toutes les 30 secondes : chaque effet attendu peut prendre ce délai.
 
 1. **Chauffe** : si l'air est au-dessus de 18,5 °C, approcher du capteur un sachet de glaçons, sans le mouiller. Dès qu'une mesure passe sous 18,5 °C, le relais 1 s'enclenche et la mesure affiche `chauffage=1`.
 2. **Arrêt** : retirer le sachet et réchauffer le capteur dans la main. Dès qu'une mesure dépasse 19,5 °C, le relais 1 se relâche et la mesure affiche `chauffage=0`.
 3. **Défaut capteur** : relais 1 enclenché (refaire le geste 1 au besoin), débrancher le fil **bleu** (SDA) du capteur d'air (**B**). Au plus 2 minutes et demie plus tard, la carte ESP32 (**A**) écrit `DEFAUT capteur air`, le relais 1 retombe, et la LED d'état s'allume.
 4. **Reprise** : rebrancher le fil bleu. À la mesure suivante, la carte ESP32 écrit `REPRISE capteur air`, la LED d'état s'éteint, et la régulation reprend.
-5. **Hors-gel** : taper `MODE HIBERNATION` puis **Entrée**. Le chauffage ne s'allume plus que sous 4 °C : le relais 1 reste ouvert, même avec le sachet de glaçons. Taper ensuite `MODE ACTIF` puis **Entrée**.
+5. **Coupure par le substrat** : relais 1 enclenché (refaire le geste 1 au besoin), serrer la sonde du substrat (**C**) dans la main. Dès qu'une mesure du substrat atteint 24 °C, la carte ESP32 écrit `COUPURE chauffage : substrat a 24.x C`, le relais 1 se relâche et la mesure affiche `chauffage=0`, même avec le sachet de glaçons sur le capteur d'air. La LED d'état reste éteinte : ce n'est pas un défaut.
+6. **Reprise après la coupure** : lâcher la sonde, puis la plonger dans un verre d'eau froide du robinet, sachet de glaçons toujours contre le capteur d'air. Tant que le substrat reste à 18,5 °C ou plus, le relais 1 reste relâché. Dès qu'une mesure passe sous 18,5 °C, la carte écrit `REPRISE chauffage : substrat a 18.x C`, et le relais 1 s'enclenche de nouveau. Sécher la sonde.
+7. **Hors-gel** : taper `MODE HIBERNATION` puis **Entrée**. Le chauffage ne s'allume plus que sous 4 °C : le relais 1 reste ouvert, même avec le sachet de glaçons. Taper ensuite `MODE ACTIF` puis **Entrée**.
 
 ## Étape 8 — Alimenter la carte ESP32 par le bloc 12 V
 

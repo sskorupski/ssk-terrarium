@@ -54,7 +54,8 @@ void test_formats_the_whole_state() {
       "{\"air\":{\"temperature\":19.2,\"humidite\":84},\"substrat\":{\"temperature\":20.5},"
       "\"sorties\":{\"chauffage\":true,\"eclairage\":false,\"pompe\":false,\"ventilateur\":false},"
       "\"mode\":\"ACTIF\",\"consigne\":19.0,\"hysteresis\":0.5,\"defaut_capteur\":false,"
-      "\"pause_chauffage\":false,\"uptime_s\":3600,\"version\":\"phase-1.1\","
+      "\"pause_chauffage\":false,\"coupure_substrat\":false,\"uptime_s\":3600,\"version\":\"phase-"
+      "1.1\","
       "\"plages\":[\"01:35-06:30\",\"14:05-17:05\"],\"fuseau\":\"CET-1CEST,M3.5.0,M10.5.0/3\","
       "\"heure_connue\":true,\"en_plage\":false,"
       "\"bornes\":{\"consigne\":[15.0,22.0],\"hysteresis\":[0.2,2.0],\"somme_max\":24.0,"
@@ -109,6 +110,15 @@ void test_invalid_readings_are_null() {
   TEST_ASSERT_NOT_NULL(strstr(out, "\"defaut_capteur\":true"));
 }
 
+// RG-coupure-par-le-substrat: the state says whether the substrate cut holds.
+void test_publishes_the_substrate_cut() {
+  StateSnapshot s = sample();
+  s.substrateCut = true;
+  char out[terrarium::supervision::kStateSize];
+  formatState(s, out, sizeof(out));
+  TEST_ASSERT_NOT_NULL(strstr(out, "\"pause_chauffage\":false,\"coupure_substrat\":true,"));
+}
+
 // A version string is quoted as is: one that would break the JSON is replaced.
 void test_unsafe_version_is_not_copied() {
   StateSnapshot s = sample();
@@ -130,6 +140,7 @@ int main() {
   UNITY_BEGIN();
   RUN_TEST(test_formats_the_whole_state);
   RUN_TEST(test_invalid_readings_are_null);
+  RUN_TEST(test_publishes_the_substrate_cut);
   RUN_TEST(test_unsafe_version_is_not_copied);
   RUN_TEST(test_too_small_buffer_gives_zero);
   RUN_TEST(test_unknown_time_has_no_window_state);

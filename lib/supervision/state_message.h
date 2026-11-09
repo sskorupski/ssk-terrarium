@@ -13,7 +13,7 @@
 namespace terrarium::supervision {
 
 // Largest state JSON: four windows, the longest time zone and the bounds fit
-// (593 bytes with a 30-character version, test_longest_state_fits).
+// (618 bytes with a 30-character version, test_longest_state_fits).
 constexpr size_t kStateSize = 640;
 
 // What the regulation loop hands to the supervision task, every cycle.
@@ -32,6 +32,7 @@ struct StateSnapshot {
   float hysteresisC;
   bool sensorFault;
   bool heatPaused;
+  bool substrateCut;  // RG-coupure-par-le-substrat.
   uint32_t uptimeS;
   const char* firmwareVersion;            // Static string; replaced if it would break the JSON.
   control::TimeWindows windows;           // PLAGES windows.
