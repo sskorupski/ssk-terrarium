@@ -309,6 +309,7 @@ void publishState(const terrarium::sensors::AirReading& air,
   std::memcpy(snapshot.timezone, timeZone, sizeof(snapshot.timezone));
   snapshot.timeKnown = timeKnown;
   snapshot.inWindow = timeKnown && terrarium::control::inAnyWindow(timeWindows, minuteOfDay());
+  snapshot.bounds = kHeatBounds;
   supervisor.publish(snapshot);
 }
 

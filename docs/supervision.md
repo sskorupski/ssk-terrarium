@@ -39,7 +39,7 @@ Sous macOS, remplacer `--capath /etc/ssl/certs` par `--cafile` et le fichier `mo
 
 | Sujet | Contenu |
 | --- | --- |
-| `ssk-terrarium/<id>/state` | toutes les 30 s, retenu : mesures (`null` si invalides), sorties, mode, consigne, hystérésis, défaut capteur, pause de chauffe, secondes depuis le démarrage, version, plages, fuseau, `heure_connue`, `en_plage` (`null` sans heure) |
+| `ssk-terrarium/<id>/state` | toutes les 30 s, retenu : mesures (`null` si invalides), sorties, mode, consigne, hystérésis, défaut capteur, pause de chauffe, secondes depuis le démarrage, version, plages, fuseau, `heure_connue`, `en_plage` (`null` sans heure), et `bornes` des réglages (ci-dessous) |
 | `ssk-terrarium/<id>/event` | réponse à chaque commande, et chaque changement de mode, série compris |
 | `ssk-terrarium/<id>/status` | `en-ligne`, ou `hors-ligne` si la connexion tombe |
 
@@ -52,6 +52,7 @@ mosquitto_pub -h mq.ssk-it.fr -p 443 --capath /etc/ssl/certs -u proprietaire -P 
 
 - `cmd/mode` : `ACTIF`, `PLAGES`, `HIBERNATION` ou `MAINTENANCE`, exactement. Le mode s'enregistre comme par la liaison série.
 - `cmd/config` : `consigne` et/ou `hysteresis`, en °C ; un champ absent garde sa valeur. Bornes fixées dans `include/config.h`, qu'aucune commande ne change (RG-reglages-bornes) : consigne de 15 à 22 °C, hystérésis de 0,2 à 2 °C, et consigne plus hystérésis sous 24 °C. Hors bornes, la commande est refusée en entier ; un JSON invalide ou un champ inconnu aussi. `plages` (liste de 0 à 4 `"HH:MM-HH:MM"`) et `fuseau` (chaîne POSIX TZ) s'y ajoutent : voir [mode-plages.md](mode-plages.md).
+- `state` publie ces bornes dans `bornes`, lues des constantes du firmware, pour qu'une application ne les recopie pas : `"bornes":{"consigne":[15.0,22.0],"hysteresis":[0.2,2.0],"somme_max":24.0,"plages_max":4,"fuseau_max":47}`. `consigne` et `hysteresis` sont les intervalles admis, bornes comprises ; consigne plus hystérésis doit rester strictement sous `somme_max` ; `plages_max` est le nombre maximal de plages, `fuseau_max` la longueur maximale d'un fuseau POSIX.
 - La réponse arrive sur `event`, par exemple `{"evenement":"reglage","consigne":30.0,"hysteresis":0.5,"resultat":"refuse","raison":"hors bornes"}`.
 - **Ne jamais publier une commande en « retenu »** (`-r`). Une commande que le courtier garde serait rejouée à chaque reconnexion : la carte ignore toute commande reçue dans les 3 secondes qui suivent son abonnement, ce qui écarte les commandes retenues, et le dit sur `event`.
 

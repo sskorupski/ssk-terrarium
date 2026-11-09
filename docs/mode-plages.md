@@ -59,7 +59,7 @@ mosquitto_pub -h mq.ssk-it.fr -p 443 --capath /etc/ssl/certs -u proprietaire -P 
 
 `plages` remplace toute la liste ; `[]` les retire toutes. Une plage invalide, plus de 4 plages ou un fuseau illisible refusent la commande en entier, tout comme une consigne hors bornes envoyée avec elle. La réponse arrive sur `event` : `{"evenement":"reglage","plages":["01:35-06:30","14:05-17:05"],"resultat":"applique"}`, ou `{"evenement":"commande","sujet":"cmd/config","resultat":"refusee","raison":"plages invalides"}`.
 
-`state` publie en plus `plages`, `fuseau`, `heure_connue`, et `en_plage` (`null` tant que l'heure n'est pas connue).
+`state` publie en plus `plages`, `fuseau`, `heure_connue`, et `en_plage` (`null` tant que l'heure n'est pas connue) ; ses `bornes` donnent `plages_max` et `fuseau_max` ([supervision.md](supervision.md)).
 
 ## Suivre dans le journal
 
