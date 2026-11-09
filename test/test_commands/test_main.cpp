@@ -217,6 +217,42 @@ void test_mode_payload_accepts_plages() {
   TEST_ASSERT_EQUAL(Mode::kSchedule, out);
 }
 
+// RG-topics-mqtt: "mise_en_securite" is a partial object of booleans, per sensor.
+void test_config_payload_carries_the_air_safety() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone,
+                    parseCommand("{\"mise_en_securite\":{\"air\":false}}", command));
+  TEST_ASSERT_TRUE(command.hasAirSafety);
+  TEST_ASSERT_FALSE(command.airSafety);
+  TEST_ASSERT_FALSE(command.hasHeat);
+  TEST_ASSERT_EQUAL(ConfigError::kNone,
+                    parseCommand("{\"mise_en_securite\":{\"air\":true}}", command));
+  TEST_ASSERT_TRUE(command.airSafety);
+}
+
+void test_config_payload_refuses_a_bad_safety() {
+  ConfigCommand command{};
+  for (const char* json :
+       {"{\"mise_en_securite\":false}", "{\"mise_en_securite\":{}}",
+        "{\"mise_en_securite\":{\"air\":0}}", "{\"mise_en_securite\":{\"air\":\"non\"}}",
+        "{\"mise_en_securite\":{\"substrat\":false}}"}) {
+    TEST_ASSERT_EQUAL_MESSAGE(ConfigError::kBadSafety, parseCommand(json, command), json);
+  }
+}
+
+void test_safety_event() {
+  char out[kEventSize];
+  TEST_ASSERT_TRUE(formatSafetyEvent(false, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"mise_en_securite\":{\"air\":false},\"resultat\":\"applique\"}",
+      out);
+  TEST_ASSERT_TRUE(formatSafetyEvent(true, out, false));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"mise_en_securite\":{\"air\":true},"
+      "\"resultat\":\"applique_non_enregistre\"}",
+      out);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_mode_payload_is_a_bare_name);
@@ -235,5 +271,8 @@ int main() {
   RUN_TEST(test_config_payload_carries_a_timezone);
   RUN_TEST(test_window_and_timezone_events);
   RUN_TEST(test_mode_payload_accepts_plages);
+  RUN_TEST(test_config_payload_carries_the_air_safety);
+  RUN_TEST(test_config_payload_refuses_a_bad_safety);
+  RUN_TEST(test_safety_event);
   return UNITY_END();
 }

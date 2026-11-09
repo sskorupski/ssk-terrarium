@@ -36,6 +36,7 @@
 #endif
 
 namespace cfg = terrarium::config;
+using terrarium::control::AirRejection;
 using terrarium::control::HeatGuard;
 using terrarium::control::HeatingPolicy;
 using terrarium::control::HeatSettings;
@@ -67,6 +68,9 @@ terrarium::alerts::Notifier notifier;
 
 ModeMachine modeMachine(kFallbackBootMode);
 SensorWatch airWatch(cfg::kSensorSilentMaxMs);
+// The owner keeps the air sensor's safety on, unless told otherwise over MQTT
+// and saved in NVS (RG-capteur-en-defaut, INV-2).
+bool airSafety = true;
 HeatGuard heatGuard(cfg::kHeatContinuousMaxMs, cfg::kHeatPauseMs);
 // Bounds of the settings received from the network (RG-reglages-bornes).
 constexpr terrarium::control::HeatSettingsBounds kHeatBounds{
@@ -210,9 +214,17 @@ bool scheduledHeater(SensorHealth health, float temperatureC) {
 // does heating for too long (RG-chauffe-continue-bornee).
 void regulate(const terrarium::sensors::AirReading& air, uint32_t nowMs) {
   const SensorHealth previous = airWatch.health();
-  const SensorHealth health =
-      airWatch.update(nowMs, air.valid && terrarium::control::isPlausibleAirReading(
-                                              air.temperatureC, air.humidityRhPercent));
+  const AirRejection previousRejection = airWatch.rejection();
+  const AirRejection rejection =
+      terrarium::control::classifyAirReading(air.valid, air.temperatureC, air.humidityRhPercent);
+  const SensorHealth health = airWatch.update(nowMs, rejection, airSafety);
+  if (rejection != previousRejection) {
+    if (rejection == AirRejection::kNone) {
+      Serial.println("MESURE air acceptee");
+    } else {
+      Serial.printf("REJET mesure air : %s\r\n", terrarium::control::rejectionName(rejection));
+    }
+  }
   if (health != previous && (health == SensorHealth::kFault || previous == SensorHealth::kFault)) {
     Serial.println(health == SensorHealth::kFault ? "DEFAUT capteur air" : "REPRISE capteur air");
   }
@@ -248,7 +260,9 @@ void regulate(const terrarium::sensors::AirReading& air, uint32_t nowMs) {
     Serial.println(heatGuard.paused() ? "PAUSE chauffage apres 2 h continues"
                                       : "REPRISE chauffage");
   }
-  const bool fault = health == SensorHealth::kFault || heatGuard.paused();
+  // With the safety off, a rejected reading still lights the LED.
+  const bool fault = health == SensorHealth::kFault || heatGuard.paused() ||
+                     (!airSafety && rejection != AirRejection::kNone);
   digitalWrite(cfg::kPinStatusLed, fault ? HIGH : LOW);
 
   // TODO(phase 2): light from the NTP time when policy.lightAllowed.
@@ -289,7 +303,10 @@ void publishState(const terrarium::sensors::AirReading& air,
                   const terrarium::sensors::SubstrateReading& substrate, uint32_t nowMs) {
   const terrarium::outputs::OutputState& out = outputs.state();
   terrarium::supervision::StateSnapshot snapshot{};
-  snapshot.airValid = air.valid;
+  // A rejected reading is never published (RG-topics-mqtt).
+  snapshot.airValid = air.valid && airWatch.rejection() == AirRejection::kNone;
+  snapshot.airRejection = airWatch.rejection();
+  snapshot.airSafety = airSafety;
   snapshot.airTemperatureC = air.temperatureC;
   snapshot.airHumidityRhPercent = air.humidityRhPercent;
   snapshot.substrateValid = substrate.valid;
@@ -403,6 +420,22 @@ void applyTimezone(const char (&candidate)[terrarium::control::kTimezoneSize]) {
   if (terrarium::supervision::formatTimezoneEvent(timeZone, event)) supervisor.sendEvent(event);
 }
 
+// Switches the air sensor's safety on or off, on the owner's command
+// (RG-capteur-en-defaut, decision 03 of cadrage 2026-006), saves and reports it.
+void applyAirSafety(bool enabled) {
+  airSafety = enabled;
+  const bool saved = settingsStore.saveAirSafety(enabled);
+  if (saved) {
+    Serial.printf("SECURITE capteur air %s, conservee apres coupure\r\n",
+                  enabled ? "ACTIVE" : "DESACTIVEE");
+  } else {
+    Serial.printf("ERREUR securite capteur air %s mais non enregistree\r\n",
+                  enabled ? "activee" : "desactivee");
+  }
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatSafetyEvent(enabled, event, saved)) supervisor.sendEvent(event);
+}
+
 // A cmd/config: refused whole if its heat part is out of bounds
 // (RG-reglages-bornes); windows and time zone were validated by the parser.
 void applyConfig(const terrarium::supervision::ConfigCommand& config) {
@@ -413,6 +446,7 @@ void applyConfig(const terrarium::supervision::ConfigCommand& config) {
   }
   if (config.hasWindows) applyTimeWindows(config.windows);
   if (config.hasTimezone) applyTimezone(config.timezone);
+  if (config.hasAirSafety) applyAirSafety(config.airSafety);
 }
 
 // Commands received over MQTT, applied here, in the regulation loop.
@@ -517,6 +551,14 @@ void restoreHeatSettings() {
                 heatSettings.hysteresisC);
 }
 
+// Restores the owner's choice for the air sensor's safety, on by default, and
+// says so when it is off.
+void restoreAirSafety() {
+  bool stored = true;
+  if (settingsStore.loadAirSafety(stored)) airSafety = stored;
+  if (!airSafety) Serial.println("ATTENTION securite capteur air DESACTIVEE");
+}
+
 void handleSerialLine(const char* line) {
   if (terrarium::control::isWifiPortalCommand(line)) {
     supervisor.requestPortal();
@@ -593,6 +635,7 @@ void setup() {
 
   restoreMode();
   restoreHeatSettings();
+  restoreAirSafety();
   restoreSchedule();
 
   // Supervision: started last, in its own task, and none of it is awaited.

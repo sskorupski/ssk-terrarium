@@ -14,6 +14,19 @@ constexpr char kSetpointField[] = "consigne";
 constexpr char kHysteresisField[] = "hysteresis";
 constexpr char kWindowsField[] = "plages";
 constexpr char kTimezoneField[] = "fuseau";
+constexpr char kSafetyField[] = "mise_en_securite";
+constexpr char kAirSensor[] = "air";
+
+// {"air": true|false}: the only sensor with a safety today.
+bool parseSafety(JsonVariantConst value, bool& out) {
+  if (!value.is<JsonObjectConst>()) return false;
+  const JsonObjectConst object = value.as<JsonObjectConst>();
+  if (object.size() != 1) return false;
+  const JsonVariantConst air = object[kAirSensor];
+  if (!air.is<bool>()) return false;
+  out = air.as<bool>();
+  return true;
+}
 
 bool parseWindows(JsonVariantConst value, control::TimeWindows& out) {
   if (!value.is<JsonArrayConst>()) return false;
@@ -82,6 +95,11 @@ ConfigError parseConfigPayload(const uint8_t* payload, size_t length,
       next.hasTimezone = true;
       continue;
     }
+    if (std::strcmp(key, kSafetyField) == 0) {
+      if (!parseSafety(field.value(), next.airSafety)) return ConfigError::kBadSafety;
+      next.hasAirSafety = true;
+      continue;
+    }
     float* target = nullptr;
     if (std::strcmp(key, kSetpointField) == 0) {
       target = &next.heat.setpointC;
@@ -115,6 +133,8 @@ const char* describe(ConfigError error) {
       return "plages invalides";
     case ConfigError::kBadTimezone:
       return "fuseau invalide";
+    case ConfigError::kBadSafety:
+      return "mise en securite invalide";
   }
   return "commande invalide";
 }
@@ -165,6 +185,15 @@ bool formatTimezoneEvent(const char* timezone, char (&out)[kEventSize]) {
       std::snprintf(out, sizeof(out),
                     "{\"evenement\":\"reglage\",\"fuseau\":\"%s\",\"resultat\":\"applique\"}",
                     timezone),
+      sizeof(out));
+}
+
+bool formatSafetyEvent(bool airSafety, char (&out)[kEventSize], bool saved) {
+  return fits(
+      std::snprintf(out, sizeof(out),
+                    "{\"evenement\":\"reglage\",\"mise_en_securite\":{\"air\":%s},"
+                    "\"resultat\":\"%s\"}",
+                    airSafety ? "true" : "false", saved ? "applique" : "applique_non_enregistre"),
       sizeof(out));
 }
 

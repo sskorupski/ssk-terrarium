@@ -35,6 +35,12 @@ class SettingsStore {
   bool loadMode(uint8_t& out);
   bool saveMode(uint8_t mode);
 
+  // Whether the owner keeps the air sensor's safety on (RG-capteur-en-defaut).
+  // loadAirSafety returns false, leaving `out` untouched, when nothing is
+  // stored; only a stored 0 reads as off, anything else as on.
+  bool loadAirSafety(bool& out);
+  bool saveAirSafety(bool enabled);
+
   // Setpoint and hysteresis of ACTIF heating (RG-mode-au-demarrage). Returns
   // false, leaving `out` untouched, when none is stored; the caller checks the
   // bounds itself (RG-reglages-bornes).

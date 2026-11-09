@@ -27,6 +27,7 @@ enum class ConfigError : uint8_t {
   kEmpty,         // No field at all.
   kBadWindows,    // "plages" is not a list of 0 to 4 valid windows.
   kBadTimezone,   // "fuseau" is not a valid POSIX TZ string.
+  kBadSafety,     // "mise_en_securite" is not {"air": true|false}.
 };
 
 // What a cmd/config carries. Each part is applied only if present.
@@ -37,10 +38,13 @@ struct ConfigCommand {
   control::TimeWindows windows;  // Replaces the current list.
   bool hasTimezone;
   char timezone[control::kTimezoneSize];
+  bool hasAirSafety;
+  bool airSafety;  // The owner keeps the air sensor's safety on (RG-capteur-en-defaut).
 };
 
 // cmd/config: a JSON object with any of "consigne" and "hysteresis" in C,
-// "plages" (a list of "HH:MM-HH:MM") and "fuseau" (a POSIX TZ string).
+// "plages" (a list of "HH:MM-HH:MM"), "fuseau" (a POSIX TZ string) and
+// "mise_en_securite" (an object whose only key, "air", is a boolean).
 // Missing heat fields keep their `current` value. On any error, `out` is left
 // untouched: the command is refused whole (RG-reglages-bornes).
 ConfigError parseConfigPayload(const uint8_t* payload, size_t length,
@@ -80,6 +84,8 @@ bool formatSettingsEvent(const control::HeatSettings& settings, bool applied,
 bool formatWindowsEvent(const control::TimeWindows& windows, char (&out)[kEventSize]);
 // `timezone` must be a valid POSIX TZ string: it is quoted verbatim.
 bool formatTimezoneEvent(const char* timezone, char (&out)[kEventSize]);
+// `saved` false: applied, but lost at the next power cut.
+bool formatSafetyEvent(bool airSafety, char (&out)[kEventSize], bool saved = true);
 // `subtopic` and `reason` are fixed strings of the firmware, quoted verbatim.
 bool formatRejectedCommandEvent(const char* subtopic, const char* reason, char (&out)[kEventSize]);
 
