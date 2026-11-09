@@ -19,6 +19,7 @@ constexpr char kSetpointKey[] = "consigne";
 constexpr char kHysteresisKey[] = "hysteresis";
 constexpr char kTimeWindowsKey[] = "plages";
 constexpr char kTimezoneKey[] = "fuseau";
+constexpr char kAirSafetyKey[] = "securite_air";
 
 }  // namespace
 
@@ -44,6 +45,25 @@ bool SettingsStore::saveMode(uint8_t mode) {
   Preferences preferences;
   if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
   const bool written = preferences.putUChar(kModeKey, mode) == sizeof(mode);
+  preferences.end();
+  return written;
+}
+
+bool SettingsStore::loadAirSafety(bool& out) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool found = preferences.isKey(kAirSafetyKey);
+  // Fails safe: a corrupted byte keeps the safety on.
+  if (found) out = preferences.getUChar(kAirSafetyKey) != 0;
+  preferences.end();
+  return found;
+}
+
+bool SettingsStore::saveAirSafety(bool enabled) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const uint8_t value = enabled ? 1 : 0;
+  const bool written = preferences.putUChar(kAirSafetyKey, value) == sizeof(value);
   preferences.end();
   return written;
 }

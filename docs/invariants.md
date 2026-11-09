@@ -9,12 +9,14 @@ Chauffage, éclairage, pompe et ventilateur passent à l'état coupé avant tout
 - **Ce qu'il protège** : un redémarrage, un plantage ou une initialisation bloquée n'allume rien.
 - **Sans lui** : un reset pendant que le chauffage chauffe le laisserait allumé, sans régulation, indéfiniment.
 
-## INV-2 — Un capteur d'air en défaut coupe le chauffage et la pompe
+## INV-2 — Un capteur d'air en défaut coupe le chauffage et la pompe, tant que sa mise en sécurité est active
 
-Un capteur muet ou aberrant plus de 2 minutes est en défaut : chauffage et pompe sont coupés, le défaut est signalé par la LED d'état et la liaison série (RG-capteur-en-defaut). Pendant ces 2 minutes, aucune décision n'est prise sur une mesure invalide : les sorties gardent leur état.
+Un capteur muet, ou dont la mesure sort de −20 à 60 °C ou de 0 à 100 % d'humidité, plus de 2 minutes est en défaut : chauffage et pompe sont coupés, le défaut est signalé par la LED d'état, la liaison série et le courtier, avec sa cause (RG-capteur-en-defaut). Pendant ces 2 minutes, aucune décision n'est prise sur une mesure rejetée : les sorties gardent leur état.
+
+La mise en sécurité est active par défaut. Seul le propriétaire la désactive, par `cmd/config` (`mise_en_securite`), et ce choix est enregistré et publié : décision `03-lever-la-mise-en-securite` du cadrage [ssk-terrarium-cadrage#2026-006](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-006), prise le 9 novembre 2026 en connaissance du risque. Désactivée, la régulation se poursuit sur la mesure rejetée, ou garde sa dernière décision si le capteur est muet ; la durée maximale de chauffe continue s'applique toujours.
 
 - **Ce qu'il protège** : les animaux, d'une régulation qui chauffe ou brumise à l'aveugle.
-- **Sans lui** : un fil du bus I2C qui se débranche laisserait le chauffage dans son dernier état, indéfiniment.
+- **Sans lui** : un fil du bus I2C qui se débranche laisserait le chauffage dans son dernier état, indéfiniment. C'est exactement ce qu'accepte le propriétaire qui désactive la mise en sécurité.
 
 ## INV-3 — La régulation ne dépend jamais du réseau
 
@@ -36,7 +38,7 @@ Le limiteur matériel à 24 °C que cet invariant imposait jusqu'ici est report�
 
 Durée maximale d'une impulsion de brumisation, de chauffe continue, de silence d'un capteur, et bornes des réglages reçus du réseau (consigne de 15 à 22 °C, hystérésis de 0,2 à 2 °C, arrêt du chauffage sous 24 °C), plancher hors plage du mode `PLAGES` (marche sous 12 °C, arrêt à 14 °C), seuils de la coupure par le substrat (coupure à 24 °C, reprise sous 18,5 °C, RG-coupure-par-le-substrat) : ce sont des `constexpr` de `include/config.h`, jamais des réglages. Un réglage reçu par MQTT ou relu en NVS est refusé hors de ces bornes (RG-reglages-bornes).
 
-- **Ce qu'il protège** : une page web ou un message MQTT erroné ne peut pas lever une protection.
+- **Ce qu'il protège** : une page web ou un message MQTT erroné ne peut pas lever une protection. Une seule exception, décidée par le propriétaire : la mise en sécurité d'une sonde (INV-2), qui se désactive par `cmd/config` ; les durées, plages et bornes, elles, ne se règlent toujours pas.
 - **Sans lui** : une faute de frappe dans un réglage suffirait à noyer ou cuire le terrarium.
 
 ## INV-6 — La logique de régulation ne touche pas au matériel

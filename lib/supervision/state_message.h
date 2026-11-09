@@ -8,19 +8,22 @@
 #include "heat_settings.h"
 #include "mode_machine.h"
 #include "posix_tz.h"
+#include "sensor_watch.h"
 #include "time_windows.h"
 
 namespace terrarium::supervision {
 
-// Largest state JSON: four windows, the longest time zone and the bounds fit
-// (618 bytes with a 30-character version, test_longest_state_fits).
-constexpr size_t kStateSize = 640;
+// Largest state JSON: four windows, the longest time zone, the longest cause
+// of rejection and the bounds fit (test_longest_state_fits).
+constexpr size_t kStateSize = 704;
 
 // What the regulation loop hands to the supervision task, every cycle.
 struct StateSnapshot {
   bool airValid;
   float airTemperatureC;
   float airHumidityRhPercent;
+  control::AirRejection airRejection;  // Why the last air reading was rejected, if it was.
+  bool airSafety;                      // The owner keeps the air sensor's safety on.
   bool substrateValid;
   float substrateTemperatureC;
   bool heater;
