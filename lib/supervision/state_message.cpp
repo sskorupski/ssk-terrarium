@@ -46,8 +46,8 @@ size_t formatState(const StateSnapshot& s, char* out, size_t size) {
       airT, airRh, substrateT, boolText(s.heater), boolText(s.light), boolText(s.mistPump),
       boolText(s.fan), control::toString(s.mode), s.setpointC, s.hysteresisC,
       boolText(s.sensorFault), rejection, boolText(s.airSafety), boolText(s.heatPaused),
-      boolText(s.substrateCut),
-      static_cast<unsigned long>(s.uptimeS), safeVersion(s.firmwareVersion));
+      boolText(s.substrateCut), static_cast<unsigned long>(s.uptimeS),
+      safeVersion(s.firmwareVersion));
   if (written <= 0 || static_cast<size_t>(written) >= size) return 0;
 
   // Drops the closing brace, then appends the PLAGES part and the bounds of
