@@ -41,6 +41,13 @@ class SettingsStore {
   bool loadAirSafety(bool& out);
   bool saveAirSafety(bool enabled);
 
+  // Roles of the air probes and their combination, one byte
+  // (control::probeSetupToStored, RG-mode-au-demarrage). loadProbeSetup returns
+  // false, leaving `out` untouched, when nothing is stored; the caller decodes
+  // and validates.
+  bool loadProbeSetup(uint8_t& out);
+  bool saveProbeSetup(uint8_t stored);
+
   // Setpoint and hysteresis of ACTIF heating (RG-mode-au-demarrage). Returns
   // false, leaving `out` untouched, when none is stored; the caller checks the
   // bounds itself (RG-reglages-bornes).

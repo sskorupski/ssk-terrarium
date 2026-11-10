@@ -23,6 +23,7 @@ Chaque pièce porte un repère, comme dans une notice de meuble. Chaque étape c
 | **G** | Adaptateur jack à vis<br><img src="illustrations/G.jpg" alt="Adaptateurs jack à vis" width="110"> | Petite pièce sans électronique : un trou rond d'un côté, où s'enfonce la fiche jack du bloc 12 V (**F**), et deux vis de l'autre, marquées **+** et **−**, où se serrent des fils. Vendu sous le nom « embase jack femelle 5,5 × 2,1 à bornier ». Sur l'illustration, l'adaptateur femelle est celui de gauche. |
 | **H** | Abaisseur 5 V<br><img src="illustrations/H.jpg" alt="Abaisseur LM2596" width="110"> | Carte qui transforme le 12 V en 5 V pour les relais, avec un afficheur, un petit potentiomètre bleu, et quatre vis marquées **VIN+**, **VIN−** (entrée, le 12 V) et **VOUT+**, **VOUT−** (sortie, le 5 V) — `IN` et `OUT` sur certains modèles. LM2596 réglable à afficheur. L'illustration montre un modèle sans afficheur, en haut de la photo. |
 | **J** | Cordon jack<br><img src="illustrations/J.jpg" alt="Fiche jack mâle" width="110"> | Câble avec une fiche jack mâle 5,5 × 2,1 d'un côté et deux fils de l'autre : il alimente la carte ESP32 (**A**) depuis l'adaptateur jack à vis (**G**). L'illustration montre la fiche seule ; le cordon la porte déjà câblée. |
+| **K** | Seconde sonde d'air, facultative | Petite carte bleue avec un capteur bleu ajouré et trois picots, marqués `S`, `+` (au milieu) et `−` : un DHT11 monté sur un module KY-015, avec sa résistance de tirage. Moins précis que le capteur d'air (**B**), il mesure l'air du garage, ou prend le relais du capteur d'air s'il tombe en panne : son rôle se règle depuis l'application ou la liaison série. Le montage fonctionne sans lui. |
 | **L** | Fils Dupont<br><img src="illustrations/L.jpg" alt="Fils Dupont" width="110"> | Fils à embouts mâle/mâle et mâle/femelle : l'embout femelle s'enfiche sur un picot, la broche mâle dans un trou de la plaque d'essai ou sous une vis |
 | **M** | Fil souple | Fil rouge et fil noir, pour relier les vis du 12 V entre elles |
 | **N** | Cordon secteur<br><img src="illustrations/N.jpg" alt="Fiche de cordon secteur" width="110"> | Câble 3G 1 mm² terminé par une fiche de prise murale |
@@ -56,11 +57,14 @@ ABSENT capteur air
 ABSENTE sonde substrat (optionnelle)
 INFO aucun mode enregistre, demarrage en MAINTENANCE
 MODE MAINTENANCE au demarrage
+SONDES sht45=interieure dht11=exterieure combinaison=priorite-sht45 au demarrage
 === pret : regulation en cours ===
-MESURE air=-- hr=-- substrat=-- chauffage=0 mode=MAINTENANCE
+REJET mesure sht45 : muet
+REJET mesure dht11 : muet
+MESURE air=-- hr=-- sht45=-- dht11=-- substrat=-- chauffage=0 mode=MAINTENANCE heure=--
 ```
 
-Les capteurs ne sont pas encore branchés : les deux lignes `ABSENT` sont attendues. Le téléversement efface le mode enregistré en phase 0 : la carte ESP32 repart en `MAINTENANCE`. Une ligne `MESURE` arrive toutes les 30 secondes, et `DEFAUT capteur air` au bout de 2 minutes environ, LED d'état allumée, puisque le capteur manque.
+Les capteurs ne sont pas encore branchés : les deux lignes `ABSENT` et les deux lignes `REJET` sont attendues. Le téléversement efface le mode enregistré en phase 0 : la carte ESP32 repart en `MAINTENANCE`. Une ligne `MESURE` arrive toutes les 30 secondes. Au bout de 2 minutes environ arrivent `DEFAUT sonde sht45 (interieure)`, `DEFAUT sonde dht11 (exterieure)` et `DEFAUT capteur air`, LED d'état allumée, puisque les capteurs manquent.
 
 Débrancher l'USB.
 
@@ -156,7 +160,7 @@ Un relais qui s'enclenche, même un instant, carte en reset ou au démarrage : s
 
 ## Étape 6 — Brancher les capteurs
 
-*Pièces : A, B, C, D, L.*
+*Pièces : A, B, C, D, K, L.*
 
 Bloc 12 V débranché de la prise murale et câble USB débranché, les fils des étapes 4 et 5 restant en place. Sur la carte ESP32 (**A**), la rangée 3,3 V et la rangée GND sont celles de l'étape 4 : colonnes `V` et `G` du bloc ANALOG. Les signaux se prennent ainsi : `SDA` (IO21) et `SCL` (IO22) sur le bloc marqué **BUS I2C**, colonnes `SDA` (picots jaunes) et `SCL` (picots blancs) — jamais sa colonne `V`, qui donne 5 V ; IO4 sur la ligne `4` du bloc ANALOG, picot jaune `S` :
 
@@ -165,15 +169,19 @@ Bloc 12 V débranché de la prise murale et câble USB débranché, les fils des
    Placer le **cavalier** sur la position **PULL UP** : il branche la résistance de tirage que la sonde exige entre ses données et le +. Elle vaut 10 kΩ sur cette carte, au lieu des 4,7 kΩ prévus : avec le câble de la sonde, d'un mètre environ, cela suffit. Si la carte ESP32 écrit `ABSENTE sonde substrat` au démarrage alors que tout est branché, ajouter une résistance de 4,7 kΩ (jaune, violet, rouge, or — ou jaune, violet, noir, marron, marron sur une résistance à 5 anneaux) entre la borne A et la borne B.
 3. **Carte adaptatrice vers la carte ESP32**, par le câble livré avec la sonde : sa petite fiche blanche dans la prise `− + D` de la carte adaptatrice, et ses trois fils vers la carte ESP32 — **−** (noir) sur un picot `G`, **+** (rouge) sur un picot `V` du **bloc ANALOG** (3,3 V), **D** sur le picot jaune `S` de la ligne **4** du bloc ANALOG. Si les trois fils sortent d'un même boîtier noir dans l'ordre noir, rouge, couleur, il s'enfiche d'un coup sur la ligne **4** du bloc ANALOG, noir côté `G`.
 
+4. **Seconde sonde d'air DHT11** (**K**), **facultative**, par trois fils Dupont femelle/femelle (**L**) : `−` sur un picot `G` du **bloc ANALOG**, `+` sur un picot `V` du **bloc ANALOG** (3,3 V), `S` sur le picot `S` de la broche **13** du bloc DIGITAL (`io13`). **Jamais le picot `V` du bloc DIGITAL**, juste à côté de `io13` : il donne 5 V, que la résistance de tirage du module renverrait sur la broche 13, qui ne supporte que 3,3 V. Garder les fils courts, un mètre au plus : le DHT11 y est sensible. Par défaut, il est **extérieur** : le poser hors du bac, dans le garage. Pour qu'il prenne le relais du capteur d'air, le placer dans le bac, loin du capteur d'air et des câbles chauffants, et le déclarer intérieur à l'étape 7.
+
 ![Capteurs](capteurs.svg)
 
-4. Brancher la carte ESP32 (**A**) par l'USB, puis le bloc 12 V (**F**). Ouvrir le terminal série et appuyer sur le bouton **RESET** de la carte ESP32.
+5. Brancher la carte ESP32 (**A**) par l'USB, puis le bloc 12 V (**F**). Ouvrir le terminal série et appuyer sur le bouton **RESET** de la carte ESP32.
 
 Aucune ligne `ABSENT` au démarrage. Toutes les 30 secondes arrive une mesure, par exemple :
 
 ```
-MESURE air=17.8C hr=62% substrat=17.5C chauffage=1 mode=ACTIF
+MESURE air=17.8C hr=62% (sht45) sht45=17.8C/62% dht11=18.0C/58% substrat=17.5C chauffage=1 mode=ACTIF heure=--
 ```
+
+`air` est la mesure qui règle le chauffage, suivie de la sonde qui la donne, puis chaque sonde d'air. Sans DHT11 branché, `dht11=--`, et la carte écrit `REJET mesure dht11 : muet` au démarrage, puis `DEFAUT sonde dht11 (exterieure)` au bout de 2 minutes : c'est attendu, et sans effet sur la régulation.
 
 La **première** ligne `MESURE` peut afficher `substrat=--` : la sonde met près d'une seconde à faire sa première mesure, et le firmware ne l'attend pas. Dès la deuxième ligne, une température s'affiche.
 
@@ -181,7 +189,7 @@ Les valeurs ressemblent à la pièce : une température proche de celle d'un the
 
 ## Étape 7 — Vérifier la régulation et le défaut capteur
 
-*Pièces : A, B, C.*
+*Pièces : A, B, C, K.*
 
 En mode `ACTIF`, le chauffage s'allume sous 18,5 °C et s'éteint à 19,5 °C. Quel que soit l'air, il se coupe dès que la sonde du substrat atteint 24 °C, et reste coupé jusqu'à ce qu'elle redescende sous 18,5 °C. Les mesures arrivent toutes les 30 secondes : chaque effet attendu peut prendre ce délai.
 
@@ -189,9 +197,10 @@ En mode `ACTIF`, le chauffage s'allume sous 18,5 °C et s'éteint à 19,5 °C. Q
 2. **Arrêt** : retirer le sachet et réchauffer le capteur dans la main. Dès qu'une mesure dépasse 19,5 °C, le relais 1 se relâche et la mesure affiche `chauffage=0`.
 3. **Défaut capteur** : relais 1 enclenché (refaire le geste 1 au besoin), débrancher le fil **bleu** (SDA) du capteur d'air (**B**). Au plus 2 minutes et demie plus tard, la carte ESP32 (**A**) écrit `DEFAUT capteur air`, le relais 1 retombe, et la LED d'état s'allume.
 4. **Reprise** : rebrancher le fil bleu. À la mesure suivante, la carte ESP32 écrit `REPRISE capteur air`, la LED d'état s'éteint, et la régulation reprend.
-5. **Coupure par le substrat** : relais 1 enclenché (refaire le geste 1 au besoin), serrer la sonde du substrat (**C**) dans la main. Dès qu'une mesure du substrat atteint 24 °C, la carte ESP32 écrit `COUPURE chauffage : substrat a 24.x C`, le relais 1 se relâche et la mesure affiche `chauffage=0`, même avec le sachet de glaçons sur le capteur d'air. La LED d'état reste éteinte : ce n'est pas un défaut.
-6. **Reprise après la coupure** : lâcher la sonde, puis la plonger dans un verre d'eau froide du robinet, sachet de glaçons toujours contre le capteur d'air. Tant que le substrat reste à 18,5 °C ou plus, le relais 1 reste relâché. Dès qu'une mesure passe sous 18,5 °C, la carte écrit `REPRISE chauffage : substrat a 18.x C`, et le relais 1 s'enclenche de nouveau. Sécher la sonde.
-7. **Hors-gel** : taper `MODE HIBERNATION` puis **Entrée**. Le chauffage ne s'allume plus que sous 4 °C : le relais 1 reste ouvert, même avec le sachet de glaçons. Taper ensuite `MODE ACTIF` puis **Entrée**.
+5. **Relais par le DHT11**, si la seconde sonde (**K**) est branchée : taper `SONDE dht11 INTERIEURE` puis **Entrée** ; la carte répond `SONDES sht45=interieure dht11=interieure combinaison=priorite-sht45 enregistrees, conservees apres coupure`. Débrancher de nouveau le fil bleu du capteur d'air : la carte écrit `REJET mesure sht45 : muet` puis `REGULATION sur dht11`, et le chauffage continue sur la mesure du DHT11, sans se couper. Au bout de 2 minutes, `DEFAUT sonde sht45 (interieure)` : la LED d'état s'allume, mais le relais 1 ne retombe pas. Rebrancher le fil bleu : `MESURE sht45 acceptee`, `REPRISE sonde sht45 (interieure)`, puis `REGULATION sur sht45`, LED éteinte. Pour laisser le DHT11 dehors, taper `SONDE dht11 EXTERIEURE`.
+6. **Coupure par le substrat** : relais 1 enclenché (refaire le geste 1 au besoin), serrer la sonde du substrat (**C**) dans la main. Dès qu'une mesure du substrat atteint 24 °C, la carte ESP32 écrit `COUPURE chauffage : substrat a 24.x C`, le relais 1 se relâche et la mesure affiche `chauffage=0`, même avec le sachet de glaçons sur le capteur d'air. La LED d'état reste éteinte : ce n'est pas un défaut.
+7. **Reprise après la coupure** : lâcher la sonde, puis la plonger dans un verre d'eau froide du robinet, sachet de glaçons toujours contre le capteur d'air. Tant que le substrat reste à 18,5 °C ou plus, le relais 1 reste relâché. Dès qu'une mesure passe sous 18,5 °C, la carte écrit `REPRISE chauffage : substrat a 18.x C`, et le relais 1 s'enclenche de nouveau. Sécher la sonde.
+8. **Hors-gel** : taper `MODE HIBERNATION` puis **Entrée**. Le chauffage ne s'allume plus que sous 4 °C : le relais 1 reste ouvert, même avec le sachet de glaçons. Taper ensuite `MODE ACTIF` puis **Entrée**.
 
 ## Étape 8 — Alimenter la carte ESP32 par le bloc 12 V
 

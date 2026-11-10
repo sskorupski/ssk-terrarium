@@ -20,6 +20,7 @@ constexpr char kHysteresisKey[] = "hysteresis";
 constexpr char kTimeWindowsKey[] = "plages";
 constexpr char kTimezoneKey[] = "fuseau";
 constexpr char kAirSafetyKey[] = "securite_air";
+constexpr char kProbeSetupKey[] = "sondes";
 
 }  // namespace
 
@@ -64,6 +65,23 @@ bool SettingsStore::saveAirSafety(bool enabled) {
   if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
   const uint8_t value = enabled ? 1 : 0;
   const bool written = preferences.putUChar(kAirSafetyKey, value) == sizeof(value);
+  preferences.end();
+  return written;
+}
+
+bool SettingsStore::loadProbeSetup(uint8_t& out) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool found = preferences.isKey(kProbeSetupKey);
+  if (found) out = preferences.getUChar(kProbeSetupKey);
+  preferences.end();
+  return found;
+}
+
+bool SettingsStore::saveProbeSetup(uint8_t stored) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool written = preferences.putUChar(kProbeSetupKey, stored) == sizeof(stored);
   preferences.end();
   return written;
 }

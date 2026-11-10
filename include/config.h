@@ -15,6 +15,8 @@ namespace terrarium::config {
 constexpr uint8_t kPinI2cSda = 21;  // SHT45 (Adafruit #6174, address 0x44).
 constexpr uint8_t kPinI2cScl = 22;
 constexpr uint8_t kPinOneWire = 4;  // DS18B20, 4.7 kOhm pull-up to 3.3 V.
+// DHT11 (KY-015 module, powered from 3.3 V, pull-up on the module), cadrage 2026-007.
+constexpr uint8_t kPinDht11 = 13;
 
 // Power outputs: channels of the 4-relay optocoupled module (Kiwi KW-1613).
 constexpr uint8_t kPinHeaterRelay = 26;

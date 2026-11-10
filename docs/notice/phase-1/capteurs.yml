@@ -1,5 +1,6 @@
-# Phase 1 wiring: SHT45 air sensor (I2C) and DS18B20 substrate probe (1-Wire)
-# (step 6, RG-brochage). Source of capteurs.svg: regenerate with
+# Phase 1 wiring: SHT45 air sensor (I2C), DS18B20 substrate probe (1-Wire)
+# and the optional DHT11 second air probe on GPIO 13 (step 6, RG-brochage,
+# cadrage 2026-007). Source of capteurs.svg: regenerate with
 # outils/schemas.sh after any change.
 metadata:
   title: Phase 1 — Capteurs
@@ -8,7 +9,7 @@ connectors:
   KS5016:
     type: (A) Carte Keyestudio KS5016
     subtype: "3,3 V et GND : colonnes V et G du bloc ANALOG"
-    pinlabels: [GPIO 21 (SDA), GPIO 22 (SCL), GPIO 4, "Rangée 3,3 V", Rangée GND]
+    pinlabels: [GPIO 21 (SDA), GPIO 22 (SCL), GPIO 4, "Rangée 3,3 V", Rangée GND, GPIO 13]
   SHT45:
     type: (B) Capteur d'air Adafruit SHT45
     subtype: connecteur STEMMA QT
@@ -17,6 +18,10 @@ connectors:
     type: (D) Carte adaptatrice de la DS18B20
     subtype: Plugable Terminal V2, cavalier sur PULL UP (10 kΩ)
     pinlabels: ["−", "+", D]
+  DHT11:
+    type: (K) Seconde sonde d'air DHT11, facultative
+    subtype: "module KY-015, alimenté en 3,3 V, jamais en 5 V"
+    pinlabels: [S, "+", "−"]
 
 cables:
   QT:
@@ -29,6 +34,11 @@ cables:
     colors: [BK, RD, GN]
     category: bundle
     type: (L) Fils Dupont
+  W3:
+    wirecount: 3
+    colors: [BK, RD, YE]
+    category: bundle
+    type: (L) Fils Dupont femelle/femelle
 
 connections:
   - - KS5016: [5, 4]
@@ -43,3 +53,6 @@ connections:
   - - KS5016: [3]
     - W2: [3]
     - ADAPTATRICE: [3]
+  - - KS5016: [5, 4, 6]
+    - W3: [1, 2, 3]
+    - DHT11: [3, 2, 1]

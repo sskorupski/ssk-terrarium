@@ -7,6 +7,9 @@
 
 using terrarium::control::HeatSettings;
 using terrarium::control::Mode;
+using terrarium::control::ProbeCombination;
+using terrarium::control::ProbeRole;
+using terrarium::control::ProbeSetup;
 using terrarium::control::TimeWindows;
 using namespace terrarium::supervision;
 
@@ -253,6 +256,66 @@ void test_safety_event() {
       out);
 }
 
+// RG-topics-mqtt (2026-007): "sondes" is a partial object of roles.
+void test_config_payload_carries_probe_roles() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone,
+                    parseCommand("{\"sondes\":{\"dht11\":\"interieure\"}}", command));
+  TEST_ASSERT_FALSE(command.hasRole[0]);
+  TEST_ASSERT_TRUE(command.hasRole[1]);
+  TEST_ASSERT_EQUAL(ProbeRole::kInterior, command.roles[1]);
+  TEST_ASSERT_FALSE(command.hasCombination);
+
+  TEST_ASSERT_EQUAL(
+      ConfigError::kNone,
+      parseCommand("{\"sondes\":{\"sht45\":\"exterieure\",\"dht11\":\"interieure\"}}", command));
+  TEST_ASSERT_TRUE(command.hasRole[0]);
+  TEST_ASSERT_EQUAL(ProbeRole::kExterior, command.roles[0]);
+  TEST_ASSERT_EQUAL(ProbeRole::kInterior, command.roles[1]);
+}
+
+void test_config_payload_refuses_bad_probe_roles() {
+  for (const char* json :
+       {"{\"sondes\":{}}", "{\"sondes\":{\"bme280\":\"interieure\"}}",
+        "{\"sondes\":{\"dht11\":\"dehors\"}}", "{\"sondes\":{\"dht11\":true}}",
+        "{\"sondes\":\"dht11\"}", "{\"consigne\":20,\"sondes\":{\"dht11\":1}}"}) {
+    ConfigCommand command{};
+    TEST_ASSERT_EQUAL_MESSAGE(ConfigError::kBadProbes, parseCommand(json, command), json);
+  }
+}
+
+void test_config_payload_carries_a_combination() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone, parseCommand("{\"combinaison\":\"moyenne\"}", command));
+  TEST_ASSERT_TRUE(command.hasCombination);
+  TEST_ASSERT_EQUAL(ProbeCombination::kAverage, command.combination);
+}
+
+void test_config_payload_refuses_a_bad_combination() {
+  for (const char* json :
+       {"{\"combinaison\":\"mediane\"}", "{\"combinaison\":2}", "{\"combinaison\":null}"}) {
+    ConfigCommand command{};
+    TEST_ASSERT_EQUAL_MESSAGE(ConfigError::kBadCombination, parseCommand(json, command), json);
+  }
+}
+
+void test_probe_setup_events() {
+  char out[kEventSize];
+  const ProbeSetup both{{ProbeRole::kInterior, ProbeRole::kInterior}, ProbeCombination::kColdest};
+  TEST_ASSERT_TRUE(formatProbeSetupEvent(both, SettingOutcome::kApplied, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"sondes\":{\"sht45\":\"interieure\",\"dht11\":\"interieure\"},"
+      "\"combinaison\":\"plus-froide\",\"resultat\":\"applique\"}",
+      out);
+  TEST_ASSERT_TRUE(formatProbeSetupEvent(both, SettingOutcome::kNotSaved, out));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"resultat\":\"applique_non_enregistre\"}"));
+  const ProbeSetup none{{ProbeRole::kExterior, ProbeRole::kExterior},
+                        ProbeCombination::kPrioritySht45};
+  TEST_ASSERT_TRUE(formatProbeSetupEvent(none, SettingOutcome::kNoInteriorProbe, out));
+  TEST_ASSERT_NOT_NULL(
+      std::strstr(out, "\"resultat\":\"refuse\",\"raison\":\"aucune sonde interieure\"}"));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_mode_payload_is_a_bare_name);
@@ -274,5 +337,10 @@ int main() {
   RUN_TEST(test_config_payload_carries_the_air_safety);
   RUN_TEST(test_config_payload_refuses_a_bad_safety);
   RUN_TEST(test_safety_event);
+  RUN_TEST(test_config_payload_carries_probe_roles);
+  RUN_TEST(test_config_payload_refuses_bad_probe_roles);
+  RUN_TEST(test_config_payload_carries_a_combination);
+  RUN_TEST(test_config_payload_refuses_a_bad_combination);
+  RUN_TEST(test_probe_setup_events);
   return UNITY_END();
 }
