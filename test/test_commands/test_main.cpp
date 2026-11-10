@@ -243,6 +243,18 @@ void test_config_payload_refuses_a_bad_safety() {
   }
 }
 
+void test_probe_heating_event() {
+  char out[kEventSize];
+  TEST_ASSERT_TRUE(formatProbeHeatingEvent(terrarium::control::HeatReason::kHighHumidity, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"chauffe-sonde\",\"sonde\":\"sht45\",\"motif\":\"humidite-haute\"}", out);
+  TEST_ASSERT_TRUE(
+      formatProbeHeatingEvent(terrarium::control::HeatReason::kHumidityOutOfRange, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"chauffe-sonde\",\"sonde\":\"sht45\",\"motif\":\"humidite-hors-plage\"}",
+      out);
+}
+
 void test_safety_event() {
   char out[kEventSize];
   TEST_ASSERT_TRUE(formatSafetyEvent(false, out));
@@ -337,6 +349,7 @@ int main() {
   RUN_TEST(test_config_payload_carries_the_air_safety);
   RUN_TEST(test_config_payload_refuses_a_bad_safety);
   RUN_TEST(test_safety_event);
+  RUN_TEST(test_probe_heating_event);
   RUN_TEST(test_config_payload_carries_probe_roles);
   RUN_TEST(test_config_payload_refuses_bad_probe_roles);
   RUN_TEST(test_config_payload_carries_a_combination);

@@ -10,6 +10,7 @@
 #include "heat_settings.h"
 #include "mode_machine.h"
 #include "posix_tz.h"
+#include "probe_heater.h"
 #include "time_windows.h"
 
 namespace terrarium::supervision {
@@ -106,6 +107,9 @@ bool formatSafetyEvent(bool airSafety, char (&out)[kEventSize], bool saved = tru
 // The roles and combination applied, or refused.
 bool formatProbeSetupEvent(const control::ProbeSetup& setup, SettingOutcome outcome,
                            char (&out)[kEventSize]);
+// A heating pulse of the SHT45, with its reason (RG-chauffe-de-la-sht45).
+// `reason` must not be kNone.
+bool formatProbeHeatingEvent(control::HeatReason reason, char (&out)[kEventSize]);
 // `subtopic` and `reason` are fixed strings of the firmware, quoted verbatim.
 bool formatRejectedCommandEvent(const char* subtopic, const char* reason, char (&out)[kEventSize]);
 
