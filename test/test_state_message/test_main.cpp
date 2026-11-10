@@ -58,7 +58,7 @@ void test_formats_the_whole_state() {
       "\"sorties\":{\"chauffage\":true,\"eclairage\":false,\"pompe\":false,\"ventilateur\":false},"
       "\"mode\":\"ACTIF\",\"consigne\":19.0,\"hysteresis\":0.5,\"defaut_capteur\":false,"
       "\"cause_mesure_air\":null,\"mise_en_securite\":{\"air\":true},\"pause_chauffage\":false,"
-      "\"uptime_s\":3600,\"version\":\"phase-1.1\","
+      "\"coupure_substrat\":false,\"uptime_s\":3600,\"version\":\"phase-1.1\","
       "\"plages\":[\"01:35-06:30\",\"14:05-17:05\"],\"fuseau\":\"CET-1CEST,M3.5.0,M10.5.0/3\","
       "\"heure_connue\":true,\"en_plage\":false,"
       "\"bornes\":{\"consigne\":[15.0,22.0],\"hysteresis\":[0.2,2.0],\"somme_max\":24.0,"
@@ -115,6 +115,15 @@ void test_invalid_readings_are_null() {
   TEST_ASSERT_NOT_NULL(strstr(out, "\"defaut_capteur\":true"));
 }
 
+// RG-coupure-par-le-substrat: the state says whether the substrate cut holds.
+void test_publishes_the_substrate_cut() {
+  StateSnapshot s = sample();
+  s.substrateCut = true;
+  char out[terrarium::supervision::kStateSize];
+  formatState(s, out, sizeof(out));
+  TEST_ASSERT_NOT_NULL(strstr(out, "\"pause_chauffage\":false,\"coupure_substrat\":true,"));
+}
+
 // RG-topics-mqtt: a rejected reading names its cause, and is never published.
 void test_rejected_reading_names_its_cause() {
   StateSnapshot s = sample();
@@ -149,6 +158,7 @@ int main() {
   UNITY_BEGIN();
   RUN_TEST(test_formats_the_whole_state);
   RUN_TEST(test_invalid_readings_are_null);
+  RUN_TEST(test_publishes_the_substrate_cut);
   RUN_TEST(test_rejected_reading_names_its_cause);
   RUN_TEST(test_unsafe_version_is_not_copied);
   RUN_TEST(test_too_small_buffer_gives_zero);

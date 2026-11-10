@@ -32,11 +32,11 @@ Les câbles chauffants sont à l'extérieur, contre les vitres et sous l'isolant
 - **Ce qu'il protège** : ni l'eau du bac ni une main qui y travaille n'approchent le 230 V.
 - **Sans lui** : un câble abîmé ou une fuite de brumisation mettrait le 230 V au contact d'un bac humide.
 
-Le limiteur matériel à 24 °C que cet invariant imposait jusqu'ici est reporté après la phase 1, par décision du propriétaire : décision `06-protection-contre-la-surchauffe` du cadrage, [#9](https://github.com/sskorupski/ssk-terrarium/issues/9). Tant qu'il manque, rien de matériel ne coupe le chauffage si le relais 1 reste collé ou si le firmware se trompe : la seule protection contre la surchauffe est le code.
+Le limiteur matériel à 24 °C que cet invariant imposait jusqu'ici est reporté après la phase 1, par décision du propriétaire : décision `06-protection-contre-la-surchauffe` du cadrage, [#9](https://github.com/sskorupski/ssk-terrarium/issues/9). Tant qu'il manque, rien de matériel ne coupe le chauffage si le relais 1 reste collé ou si le firmware se trompe : la seule protection contre la surchauffe est le code, coupure par le substrat comprise (RG-coupure-par-le-substrat).
 
 ## INV-5 — Les limites de sécurité ne se règlent pas à l'exécution
 
-Durée maximale d'une impulsion de brumisation, de chauffe continue, de silence d'un capteur, et bornes des réglages reçus du réseau (consigne de 15 à 22 °C, hystérésis de 0,2 à 2 °C, arrêt du chauffage sous 24 °C), plancher hors plage du mode `PLAGES` (marche sous 12 °C, arrêt à 14 °C) : ce sont des `constexpr` de `include/config.h`, jamais des réglages. Un réglage reçu par MQTT ou relu en NVS est refusé hors de ces bornes (RG-reglages-bornes).
+Durée maximale d'une impulsion de brumisation, de chauffe continue, de silence d'un capteur, et bornes des réglages reçus du réseau (consigne de 15 à 22 °C, hystérésis de 0,2 à 2 °C, arrêt du chauffage sous 24 °C), plancher hors plage du mode `PLAGES` (marche sous 12 °C, arrêt à 14 °C), seuils de la coupure par le substrat (coupure à 24 °C, reprise sous 18,5 °C, RG-coupure-par-le-substrat) : ce sont des `constexpr` de `include/config.h`, jamais des réglages. Un réglage reçu par MQTT ou relu en NVS est refusé hors de ces bornes (RG-reglages-bornes).
 
 - **Ce qu'il protège** : une page web ou un message MQTT erroné ne peut pas lever une protection. Une seule exception, décidée par le propriétaire : la mise en sécurité d'une sonde (INV-2), qui se désactive par `cmd/config` ; les durées, plages et bornes, elles, ne se règlent toujours pas.
 - **Sans lui** : une faute de frappe dans un réglage suffirait à noyer ou cuire le terrarium.

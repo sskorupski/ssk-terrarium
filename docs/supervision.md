@@ -39,7 +39,7 @@ Sous macOS, remplacer `--capath /etc/ssl/certs` par `--cafile` et le fichier `mo
 
 | Sujet | Contenu |
 | --- | --- |
-| `ssk-terrarium/<id>/state` | toutes les 30 s, retenu : mesures (`null` si invalides ou rejetées), sorties, mode, consigne, hystérésis, défaut capteur, cause du rejet de la mesure de l'air (`cause_mesure_air`), mise en sécurité de chaque sonde (`mise_en_securite`), pause de chauffe, secondes depuis le démarrage, version, plages, fuseau, `heure_connue`, `en_plage` (`null` sans heure), et `bornes` des réglages (ci-dessous) |
+| `ssk-terrarium/<id>/state` | toutes les 30 s, retenu : mesures (`null` si invalides ou rejetées), sorties, mode, consigne, hystérésis, défaut capteur, cause du rejet de la mesure de l'air (`cause_mesure_air`), mise en sécurité de chaque sonde (`mise_en_securite`), pause de chauffe, coupure par le substrat (`coupure_substrat`, RG-coupure-par-le-substrat), secondes depuis le démarrage, version, plages, fuseau, `heure_connue`, `en_plage` (`null` sans heure), et `bornes` des réglages (ci-dessous) |
 | `ssk-terrarium/<id>/event` | réponse à chaque commande, et chaque changement de mode, série compris |
 | `ssk-terrarium/<id>/status` | `en-ligne`, ou `hors-ligne` si la connexion tombe |
 

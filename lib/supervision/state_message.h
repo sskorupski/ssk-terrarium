@@ -35,6 +35,7 @@ struct StateSnapshot {
   float hysteresisC;
   bool sensorFault;
   bool heatPaused;
+  bool substrateCut;  // RG-coupure-par-le-substrat.
   uint32_t uptimeS;
   const char* firmwareVersion;            // Static string; replaced if it would break the JSON.
   control::TimeWindows windows;           // PLAGES windows.

@@ -41,12 +41,13 @@ size_t formatState(const StateSnapshot& s, char* out, size_t size) {
       "{\"air\":{\"temperature\":%s,\"humidite\":%s},\"substrat\":{\"temperature\":%s},"
       "\"sorties\":{\"chauffage\":%s,\"eclairage\":%s,\"pompe\":%s,\"ventilateur\":%s},"
       "\"mode\":\"%s\",\"consigne\":%.1f,\"hysteresis\":%.1f,\"defaut_capteur\":%s,"
-      "\"cause_mesure_air\":%s,\"mise_en_securite\":{\"air\":%s},\"pause_chauffage\":%s,\"uptime_"
-      "s\":%lu,\"version\":\"%s\"}",
+      "\"cause_mesure_air\":%s,\"mise_en_securite\":{\"air\":%s},\"pause_chauffage\":%s,"
+      "\"coupure_substrat\":%s,\"uptime_s\":%lu,\"version\":\"%s\"}",
       airT, airRh, substrateT, boolText(s.heater), boolText(s.light), boolText(s.mistPump),
       boolText(s.fan), control::toString(s.mode), s.setpointC, s.hysteresisC,
       boolText(s.sensorFault), rejection, boolText(s.airSafety), boolText(s.heatPaused),
-      static_cast<unsigned long>(s.uptimeS), safeVersion(s.firmwareVersion));
+      boolText(s.substrateCut), static_cast<unsigned long>(s.uptimeS),
+      safeVersion(s.firmwareVersion));
   if (written <= 0 || static_cast<size_t>(written) >= size) return 0;
 
   // Drops the closing brace, then appends the PLAGES part and the bounds of
