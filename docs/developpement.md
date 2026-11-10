@@ -34,6 +34,22 @@ Commandes de la liaison série : `MODE ACTIF`, `MODE PLAGES`, `MODE HIBERNATION`
 
 Lignes de la supervision ([supervision.md](supervision.md)) : au démarrage, `WIFI reseau de configuration ssk-terrarium-XXXX, mot de passe …, page http://192.168.4.1`, `MQTT identifiant ssk-terrarium/<id>`, puis `WIFI enregistre : <ssid>, courtier <hote>:<port>` ou `WIFI aucun reseau enregistre : reseau de configuration ouvert`, et `CONSIGNE 20.0C hysteresis 0.5C au demarrage` si une consigne est enregistrée (`INFO consigne enregistree hors bornes, valeurs du firmware` sinon). En marche : `PORTAIL ouvert : reseau …` / `PORTAIL ferme`, `WIFI connecte a <ssid>, adresse <ip>` / `WIFI perdu, nouvel essai automatique`, `WIFI echec de connexion a <ssid> : <raison> (code N)` une fois par cause (`reseau introuvable : absent, trop loin, ou en 5 GHz seulement`, `mot de passe refuse`, `authentification refusee : …`, `securite non prise en charge : box en WPA3 seul ?`, `signal perdu : …`, `refus de la box`), `WIFI reglages enregistres : …`, `WIFI ouverture du reseau de configuration demandee`, `MQTT connecte a <hote>:<port>`, `MQTT echec de connexion a <hote>:<port> (code N), nouvel essai plus tard` (code négatif : réseau ou TLS ; 4 ou 5 : compte refusé), `MQTT deconnecte`, `MQTT commande cmd/… refusee : <raison>`, `MQTT commande cmd/… ignoree : recue a la connexion`, `CONSIGNE 20.0C hysteresis 0.5C enregistree`, `REFUS consigne … hors bornes (…)`. Un changement de mode reçu par MQTT s'écrit comme un changement série : `MODE HIBERNATION enregistre, conserve apres coupure`.
 
+## Essayer sur le montage
+
+Le capteur d'air SHT45 et la sonde du substrat sont dans le bac, au garage ; le poste de développement est au bureau, avec une carte qui n'a que le DHT11. Sur cette carte, `sht45=--` et `substrat=--` sont attendus, et le DHT11, extérieur par défaut, mesure l'air du bureau. Elle suffit pour éprouver ce qui ne dépend ni de la SHT45 ni du bac : liaison série, commandes, réglages, Wi-Fi, MQTT, portail.
+
+Le firmware n'a pas encore de mise à jour à distance (fonctionnalité `mise-a-jour` du référentiel). Tout essai qui demande la SHT45 ou le bac se fait donc au garage, le régulateur branché en USB à un portable qui a PlatformIO :
+
+```bash
+git fetch origin && git switch <branche>
+pio run -e esp32dev -t upload
+pio device monitor                  # puis le bouton EN de la carte
+```
+
+Ouverte après le démarrage, la console ne montre que les lignes `MESURE` : les lignes qui disent pourquoi une sonde manque (`ABSENT capteur air`, `REJET mesure sht45 : <cause>`) sont déjà passées. Le bouton **EN** redémarre la carte sous les yeux de la console.
+
+**Chauffe de la SHT45** (RG-chauffe-de-la-sht45) : souffler sur le capteur juste avant un relevé le porte au-dessus de 95 % ; le tenir quelques secondes au-dessus d'une tasse d'eau chaude, sans le mouiller, le fait passer au-delà de 100 % (`REJET mesure sht45 : humidite-hors-plage`). Juste après la ligne `MESURE` arrive `CHAUFFE sonde sht45 : humidite …`, ou `ERREUR chauffe sonde sht45 refusee` si la commande ne passe pas. Le relevé suivant, 30 secondes plus tard, dit si la chauffe a séché la sonde. Une seconde chauffe n'arrive pas avant 5 minutes.
+
 ## Outils et versions
 
 - PlatformIO Core et clang-format : leurs versions sont épinglées dans `requirements-ci.txt`, que Dependabot fait monter. Pour s'y aligner : `pip install -r requirements-ci.txt` dans un environnement virtuel.
