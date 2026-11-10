@@ -7,17 +7,17 @@ namespace terrarium::control {
 ModePolicy policyFor(Mode mode) {
   switch (mode) {
     case Mode::kActive:
-      return {HeatingPolicy::kSetpoint, true, true};
+      return {HeatingPolicy::kSetpoint, true, true, FanPolicy::kPeriodic};
     case Mode::kHibernation:
-      return {HeatingPolicy::kFrostProtection, false, false};
+      return {HeatingPolicy::kFrostProtection, false, false, FanPolicy::kDaily};
     case Mode::kSchedule:
       // Light and fan follow ACTIF (RG-sorties-par-mode).
-      return {HeatingPolicy::kSchedule, true, true};
+      return {HeatingPolicy::kSchedule, true, true, FanPolicy::kPeriodic};
     case Mode::kMaintenance:
       break;
   }
   // MAINTENANCE, and any out-of-range value: everything off.
-  return {HeatingPolicy::kOff, false, false};
+  return {HeatingPolicy::kOff, false, false, FanPolicy::kOff};
 }
 
 const char* toString(Mode mode) {

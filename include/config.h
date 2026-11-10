@@ -46,9 +46,12 @@ constexpr uint32_t kMistMinIntervalMs = 10UL * 60UL * 1000UL;
 constexpr uint8_t kLightOnHour = 8;
 constexpr uint8_t kLightOffHour = 21;
 
-// Periodic ventilation in ACTIF (cadrage F10, values to validate).
-constexpr uint32_t kFanCyclePeriodMs = 60UL * 60UL * 1000UL;
-constexpr uint32_t kFanOnDurationMs = 5UL * 60UL * 1000UL;
+// Ventilation defaults (cadrage F10, RG-ventilation-periodique, 2026-013):
+// 5 minutes every 60 in ACTIF and PLAGES, the daily HIBERNATION airing at
+// 13:00. Settable within the bounds below.
+constexpr uint16_t kFanDurationMin = 5;
+constexpr uint16_t kFanPeriodMin = 60;
+constexpr uint16_t kFanDailyMinute = 13 * 60;
 
 // --- HIBERNATION mode: frost protection only (cadrage, modes table) ----------
 
@@ -90,6 +93,17 @@ constexpr float kSetpointMaxC = 22.0f;
 constexpr float kHeatHysteresisMinC = 0.2f;
 constexpr float kHeatHysteresisMaxC = 2.0f;
 
+// Ventilation (RG-reglages-bornes, decision 02 of cadrage 2026-013), in
+// minutes; the duration must also stay strictly below the period.
+constexpr uint16_t kFanDurationMinMin = 1;
+constexpr uint16_t kFanDurationMaxMin = 30;
+constexpr uint16_t kFanPeriodMinMin = 15;
+constexpr uint16_t kFanPeriodMaxMin = 240;
+// The daily HIBERNATION airing: never two within 12 hours, and every 24 hours
+// while the time is unknown (RG-ventilation-periodique). Not settings.
+constexpr uint32_t kFanDailyMinGapMs = 12UL * 60UL * 60UL * 1000UL;
+constexpr uint32_t kFanDailyFallbackMs = 24UL * 60UL * 60UL * 1000UL;
+
 // --- Alert thresholds (cadrage F9) --------------------------------------------
 
 constexpr float kAlertTempLowC = 15.0f;
@@ -120,7 +134,13 @@ static_assert(kProbeHeatPulseMs < kSensorPeriodMs, "the chip must cool before th
 static_assert(kHeatHysteresisC > 0.0f, "hysteresis must be positive");
 static_assert(kFrostHeatOnBelowC < kFrostHeatOffAtC, "frost band must not be empty");
 static_assert(kMistPulseMs <= kMistPulseMaxMs, "default pulse exceeds the safety limit");
-static_assert(kFanOnDurationMs < kFanCyclePeriodMs, "fan would never stop");
+static_assert(kFanDurationMin < kFanPeriodMin, "fan would never stop");
+static_assert(kFanDurationMinMin <= kFanDurationMin && kFanDurationMin <= kFanDurationMaxMin,
+              "default fan duration outside its bounds");
+static_assert(kFanPeriodMinMin <= kFanPeriodMin && kFanPeriodMin <= kFanPeriodMaxMin,
+              "default fan period outside its bounds");
+static_assert(kFanDailyMinute < 24 * 60, "daily airing must fall within the day");
+static_assert(kFanDailyMinGapMs < kFanDailyFallbackMs, "fallback must exceed the minimum gap");
 static_assert(kLightOnHour < kLightOffHour && kLightOffHour <= 24, "invalid light schedule");
 static_assert(kSetpointC + kHeatHysteresisC < kAlertTempHighC,
               "setpoint band reaches the high alert threshold");
