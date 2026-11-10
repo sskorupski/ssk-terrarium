@@ -15,7 +15,7 @@ graph {
   <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
    <td balign="left">(A) Carte Keyestudio KS5016</td>
    <td balign="left">3,3 V et GND : colonnes V et G du bloc ANALOG</td>
-   <td balign="left">5-pin</td>
+   <td balign="left">6-pin</td>
   </tr></table>
  </td></tr>
  <tr><td>
@@ -39,6 +39,10 @@ graph {
    <tr>
     <td>Rangée GND</td>
     <td port="p5r">5</td>
+   </tr>
+   <tr>
+    <td>GPIO 13</td>
+    <td port="p6r">6</td>
    </tr>
   </table>
  </td></tr>
@@ -107,6 +111,38 @@ graph {
    <tr>
     <td port="p3l">3</td>
     <td>D</td>
+   </tr>
+  </table>
+ </td></tr>
+</table>
+> fillcolor="#FFFFFF" shape=box style=filled]
+	DHT11 [label=<
+<table border="0" cellspacing="0" cellpadding="0">
+ <tr><td>
+  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
+   <td balign="left">DHT11</td>
+  </tr></table>
+ </td></tr>
+ <tr><td>
+  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
+   <td balign="left">(K) Seconde sonde d'air DHT11, facultative</td>
+   <td balign="left">module KY-015, alimenté en 3,3 V, jamais en 5 V</td>
+   <td balign="left">3-pin</td>
+  </tr></table>
+ </td></tr>
+ <tr><td>
+  <table border="0" cellspacing="0" cellpadding="3" cellborder="1">
+   <tr>
+    <td port="p1l">1</td>
+    <td>S</td>
+   </tr>
+   <tr>
+    <td port="p2l">2</td>
+    <td>+</td>
+   </tr>
+   <tr>
+    <td port="p3l">3</td>
+    <td>−</td>
    </tr>
   </table>
  </td></tr>
@@ -278,6 +314,84 @@ graph {
      <table cellspacing="0" cellborder="0" border="0">
       <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
       <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#00ff00" border="0"></td></tr>
+      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
+     </table>
+    </td>
+   </tr>
+   <tr><td>&nbsp;</td></tr>
+  </table>
+ </td></tr>
+</table>
+> fillcolor="#FFFFFF" shape=box style="filled,dashed"]
+	edge [color="#000000:#000000:#000000"]
+	KS5016:p5r:e -- W3:w1:w
+	W3:w1:e -- DHT11:p3l:w
+	edge [color="#000000:#ff0000:#000000"]
+	KS5016:p4r:e -- W3:w2:w
+	W3:w2:e -- DHT11:p2l:w
+	edge [color="#000000:#ffff00:#000000"]
+	KS5016:p6r:e -- W3:w3:w
+	W3:w3:e -- DHT11:p1l:w
+	W3 [label=<
+<table border="0" cellspacing="0" cellpadding="0">
+ <tr><td>
+  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
+   <td balign="left">W3</td>
+  </tr></table>
+ </td></tr>
+ <tr><td>
+  <table border="0" cellspacing="0" cellpadding="3" cellborder="1"><tr>
+   <td balign="left">(L) Fils Dupont femelle/femelle</td>
+   <td balign="left">3x</td>
+  </tr></table>
+ </td></tr>
+ <tr><td>
+  <table border="0" cellspacing="0" cellborder="0">
+   <tr><td>&nbsp;</td></tr>
+   <tr>
+    <td>KS5016:5:Rangée GND</td>
+    <td>
+     BK
+    </td>
+    <td>DHT11:3:−</td>
+   </tr>
+   <tr>
+    <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w1" height="6">
+     <table cellspacing="0" cellborder="0" border="0">
+      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
+      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
+      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
+     </table>
+    </td>
+   </tr>
+   <tr>
+    <td>KS5016:4:Rangée 3,3 V</td>
+    <td>
+     RD
+    </td>
+    <td>DHT11:2:+</td>
+   </tr>
+   <tr>
+    <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w2" height="6">
+     <table cellspacing="0" cellborder="0" border="0">
+      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
+      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#ff0000" border="0"></td></tr>
+      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
+     </table>
+    </td>
+   </tr>
+   <tr>
+    <td>KS5016:6:GPIO 13</td>
+    <td>
+     YE
+    </td>
+    <td>DHT11:1:S</td>
+   </tr>
+   <tr>
+    <td colspan="3" border="0" cellspacing="0" cellpadding="0" port="w3" height="6">
+     <table cellspacing="0" cellborder="0" border="0">
+      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
+      <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#ffff00" border="0"></td></tr>
       <tr><td colspan="3" cellpadding="0" height="2" bgcolor="#000000" border="0"></td></tr>
      </table>
     </td>

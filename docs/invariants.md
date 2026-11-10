@@ -9,14 +9,16 @@ Chauffage, éclairage, pompe et ventilateur passent à l'état coupé avant tout
 - **Ce qu'il protège** : un redémarrage, un plantage ou une initialisation bloquée n'allume rien.
 - **Sans lui** : un reset pendant que le chauffage chauffe le laisserait allumé, sans régulation, indéfiniment.
 
-## INV-2 — Un capteur d'air en défaut coupe le chauffage et la pompe, tant que sa mise en sécurité est active
+## INV-2 — Sans sonde intérieure acceptée, chauffage et pompe sont coupés, tant que la mise en sécurité est active
 
-Un capteur muet, ou dont la mesure sort de −20 à 60 °C ou de 0 à 100 % d'humidité, plus de 2 minutes est en défaut : chauffage et pompe sont coupés, le défaut est signalé par la LED d'état, la liaison série et le courtier, avec sa cause (RG-capteur-en-defaut). Pendant ces 2 minutes, aucune décision n'est prise sur une mesure rejetée : les sorties gardent leur état.
+Une mesure est rejetée quand la sonde est muette, ou quand elle sort de −20 à 60 °C ou de 0 à 100 % d'humidité (RG-capteur-en-defaut). Une sonde rejetée plus de 2 minutes est en défaut, et ce défaut est signalé sur la liaison série et le courtier, avec sa cause ; pour une sonde intérieure, aussi par la LED d'état. Le défaut d'une sonde ne coupe rien à lui seul : tant qu'une autre sonde intérieure est acceptée, la régulation continue sur elle (RG-sondes-d-air, cadrage [ssk-terrarium-cadrage#2026-007](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-007)).
 
-La mise en sécurité est active par défaut. Seul le propriétaire la désactive, par `cmd/config` (`mise_en_securite`), et ce choix est enregistré et publié : décision `03-lever-la-mise-en-securite` du cadrage [ssk-terrarium-cadrage#2026-006](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-006), prise le 9 novembre 2026 en connaissance du risque. Désactivée, la régulation se poursuit sur la mesure rejetée, ou garde sa dernière décision si le capteur est muet ; la durée maximale de chauffe continue s'applique toujours.
+Quand aucune sonde intérieure n'est acceptée depuis plus de 2 minutes, l'air intérieur est en défaut : chauffage et pompe sont coupés, et le défaut est signalé par la LED, la liaison série et le courtier. Pendant ces 2 minutes, aucune décision n'est prise sans mesure de l'air : les sorties gardent leur état. Au moins une sonde reste toujours intérieure : un réglage qui n'en laisserait aucune est refusé (INV-5).
+
+La mise en sécurité est active par défaut. Seul le propriétaire la désactive, par `cmd/config` (`mise_en_securite`), et ce choix est enregistré et publié : décision `03-lever-la-mise-en-securite` du cadrage [ssk-terrarium-cadrage#2026-006](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-006), prise le 9 novembre 2026 en connaissance du risque. Elle porte sur l'air intérieur, toutes sondes intérieures ensemble. Désactivée, la régulation se poursuit sur la mesure rejetée de la sonde intérieure prioritaire, ou garde sa dernière décision si toutes sont muettes ; la durée maximale de chauffe continue s'applique toujours.
 
 - **Ce qu'il protège** : les animaux, d'une régulation qui chauffe ou brumise à l'aveugle.
-- **Sans lui** : un fil du bus I2C qui se débranche laisserait le chauffage dans son dernier état, indéfiniment. C'est exactement ce qu'accepte le propriétaire qui désactive la mise en sécurité.
+- **Sans lui** : un fil du bus I2C qui se débranche, sans autre sonde intérieure pour prendre le relais, laisserait le chauffage dans son dernier état, indéfiniment. C'est exactement ce qu'accepte le propriétaire qui désactive la mise en sécurité.
 
 ## INV-3 — La régulation ne dépend jamais du réseau
 
@@ -36,7 +38,7 @@ Le limiteur matériel à 24 °C que cet invariant imposait jusqu'ici est report�
 
 ## INV-5 — Les limites de sécurité ne se règlent pas à l'exécution
 
-Durée maximale d'une impulsion de brumisation, de chauffe continue, de silence d'un capteur, et bornes des réglages reçus du réseau (consigne de 15 à 22 °C, hystérésis de 0,2 à 2 °C, arrêt du chauffage sous 24 °C), plancher hors plage du mode `PLAGES` (marche sous 12 °C, arrêt à 14 °C), seuils de la coupure par le substrat (coupure à 24 °C, reprise sous 18,5 °C, RG-coupure-par-le-substrat) : ce sont des `constexpr` de `include/config.h`, jamais des réglages. Un réglage reçu par MQTT ou relu en NVS est refusé hors de ces bornes (RG-reglages-bornes).
+Durée maximale d'une impulsion de brumisation, de chauffe continue, de silence d'un capteur, et bornes des réglages reçus du réseau (consigne de 15 à 22 °C, hystérésis de 0,2 à 2 °C, arrêt du chauffage sous 24 °C), plancher hors plage du mode `PLAGES` (marche sous 12 °C, arrêt à 14 °C), seuils de la coupure par le substrat (coupure à 24 °C, reprise sous 18,5 °C, RG-coupure-par-le-substrat), plages de rejet d'une mesure de l'air : ce sont des `constexpr` de `include/config.h` ou de `lib/control`, jamais des réglages. Un réglage reçu par MQTT ou la liaison série, ou relu en NVS, est refusé hors de ces bornes (RG-reglages-bornes). Le rôle des sondes et leur combinaison se règlent (cadrage [ssk-terrarium-cadrage#2026-007](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-007)), mais jamais au point de ne laisser aucune sonde intérieure.
 
 - **Ce qu'il protège** : une page web ou un message MQTT erroné ne peut pas lever une protection. Une seule exception, décidée par le propriétaire : la mise en sécurité d'une sonde (INV-2), qui se désactive par `cmd/config` ; les durées, plages et bornes, elles, ne se règlent toujours pas.
 - **Sans lui** : une faute de frappe dans un réglage suffirait à noyer ou cuire le terrarium.
