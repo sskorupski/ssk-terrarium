@@ -249,7 +249,8 @@ void Supervisor::publishPending() {
   snapshotFresh_ = false;
   portEXIT_CRITICAL(&lock_);
   if (!fresh) return;
-  char json[kStateBufferSize];
+  // Static: only this task formats the state, and 1 kB would weigh on its stack.
+  static char json[kStateBufferSize];
   const size_t length = supervision::formatState(snapshot, json, sizeof(json));
   if (length > 0) mqtt_.publishState(json, length);
 }

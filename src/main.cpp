@@ -12,10 +12,12 @@
 #include <cstring>
 #include <ctime>
 
+#include "air_probes.h"
 #include "air_sensor.h"
 #include "alerts.h"
 #include "commands.h"
 #include "config.h"
+#include "dht_sensor.h"
 #include "heat_guard.h"
 #include "heat_settings.h"
 #include "hysteresis_regulator.h"
@@ -37,13 +39,20 @@
 #endif
 
 namespace cfg = terrarium::config;
+using terrarium::control::AirMeasure;
 using terrarium::control::AirRejection;
+using terrarium::control::AirSource;
 using terrarium::control::HeatGuard;
 using terrarium::control::HeatingPolicy;
 using terrarium::control::HeatSettings;
 using terrarium::control::HysteresisRegulator;
+using terrarium::control::kProbeCount;
 using terrarium::control::Mode;
 using terrarium::control::ModeMachine;
+using terrarium::control::Probe;
+using terrarium::control::ProbeRole;
+using terrarium::control::ProbeSample;
+using terrarium::control::ProbeSetup;
 using terrarium::control::ScheduledHeating;
 using terrarium::control::SensorHealth;
 using terrarium::control::SensorWatch;
@@ -63,15 +72,26 @@ constexpr size_t kSerialLineSize = 64;  // "PLAGES " and four windows: 54.
 terrarium::outputs::Outputs outputs({cfg::kPinHeaterRelay, cfg::kPinLightRelay, cfg::kPinMistPump,
                                      cfg::kPinFanRelay, cfg::kOutputOffLevel});
 terrarium::sensors::AirSensor airSensor;
+terrarium::sensors::DhtSensor dhtSensor(cfg::kPinDht11);
 terrarium::sensors::SubstrateSensor substrateSensor(cfg::kPinOneWire);
 terrarium::storage::SettingsStore settingsStore;
 terrarium::network::Supervisor supervisor(settingsStore);
 terrarium::alerts::Notifier notifier;
 
 ModeMachine modeMachine(kFallbackBootMode);
+// The interior air, all interior probes together (RG-capteur-en-defaut).
 SensorWatch airWatch(cfg::kSensorSilentMaxMs);
-// The owner keeps the air sensor's safety on, unless told otherwise over MQTT
-// and saved in NVS (RG-capteur-en-defaut, INV-2).
+// Each probe on its own, safety always on: its own fault is only signalled.
+SensorWatch probeWatches[kProbeCount] = {SensorWatch(cfg::kSensorSilentMaxMs),
+                                         SensorWatch(cfg::kSensorSilentMaxMs)};
+// Roles of the probes and their combination (RG-sondes-d-air), from NVS.
+ProbeSetup probeSetup = terrarium::control::kDefaultProbeSetup;
+// This cycle's samples and the air measure made of them.
+ProbeSample probeSamples[kProbeCount] = {{AirRejection::kNone, 0.0f, 0.0f},
+                                         {AirRejection::kNone, 0.0f, 0.0f}};
+AirMeasure airMeasure{AirSource::kNone, 0.0f, 0.0f, AirRejection::kNone, AirRejection::kNone};
+// The owner keeps the interior air's safety on, unless told otherwise over
+// MQTT and saved in NVS (RG-capteur-en-defaut, INV-2).
 bool airSafety = true;
 HeatGuard heatGuard(cfg::kHeatContinuousMaxMs, cfg::kHeatPauseMs);
 terrarium::control::SubstrateCap substrateCap(cfg::kSubstrateCutAtC, cfg::kSubstrateResumeBelowC,
@@ -213,27 +233,71 @@ bool scheduledHeater(SensorHealth health, float temperatureC) {
   return heaterFrom(floorHeating, health, temperatureC);
 }
 
-// One regulation step. Misting, light and fan stay off in phase 1
-// (RG-sorties-par-mode); an air sensor in fault switches heating off, and so
-// do a hot substrate (RG-coupure-par-le-substrat) and heating for too long
-// (RG-chauffe-continue-bornee).
-void regulate(const terrarium::sensors::AirReading& air,
-              const terrarium::sensors::SubstrateReading& substrate, uint32_t nowMs) {
-  const SensorHealth previous = airWatch.health();
-  const AirRejection previousRejection = airWatch.rejection();
-  const AirRejection rejection =
-      terrarium::control::classifyAirReading(air.valid, air.temperatureC, air.humidityRhPercent);
-  const SensorHealth health = airWatch.update(nowMs, rejection, airSafety);
-  if (rejection != previousRejection) {
-    if (rejection == AirRejection::kNone) {
-      Serial.println("MESURE air acceptee");
-    } else {
-      Serial.printf("REJET mesure air : %s\r\n", terrarium::control::rejectionName(rejection));
+bool isInterior(Probe probe) {
+  return probeSetup.roles[static_cast<uint8_t>(probe)] == ProbeRole::kInterior;
+}
+
+bool probeInFault(Probe probe) {
+  return probeWatches[static_cast<uint8_t>(probe)].health() == SensorHealth::kFault;
+}
+
+// Classifies each probe's reading, watches it on its own, and reports its
+// rejections and faults (RG-capteur-en-defaut).
+void watchProbes(const terrarium::sensors::AirReading (&readings)[kProbeCount], uint32_t nowMs) {
+  for (uint8_t i = 0; i < kProbeCount; ++i) {
+    const auto probe = static_cast<Probe>(i);
+    const char* name = terrarium::control::probeName(probe);
+    const terrarium::sensors::AirReading& reading = readings[i];
+    const AirRejection previousRejection = probeWatches[i].rejection();
+    const bool wasInFault = probeInFault(probe);
+    const AirRejection rejection = terrarium::control::classifyAirReading(
+        reading.valid, reading.temperatureC, reading.humidityRhPercent);
+    probeSamples[i] = {rejection, reading.temperatureC, reading.humidityRhPercent};
+    probeWatches[i].update(nowMs, rejection, /*safetyEnabled=*/true);
+    if (rejection != previousRejection) {
+      if (rejection == AirRejection::kNone) {
+        Serial.printf("MESURE %s acceptee\r\n", name);
+      } else {
+        Serial.printf("REJET mesure %s : %s\r\n", name,
+                      terrarium::control::rejectionName(rejection));
+      }
+    }
+    if (probeInFault(probe) != wasInFault) {
+      Serial.printf("%s sonde %s (%s)\r\n", wasInFault ? "REPRISE" : "DEFAUT", name,
+                    terrarium::control::roleName(probeSetup.roles[i]));
     }
   }
+}
+
+// The one air measure the regulation runs on (RG-sondes-d-air), and the health
+// of the interior air as a whole (RG-capteur-en-defaut).
+SensorHealth measureAir(uint32_t nowMs) {
+  const AirSource previousSource = airMeasure.source;
+  airMeasure = terrarium::control::combineAir(probeSetup, probeSamples);
+  if (airMeasure.source != previousSource) {
+    if (const char* source = terrarium::control::sourceName(airMeasure.source)) {
+      Serial.printf("REGULATION sur %s\r\n", source);
+    } else {
+      Serial.println("REGULATION sans sonde interieure acceptee");
+    }
+  }
+  const SensorHealth previous = airWatch.health();
+  const SensorHealth health = airWatch.update(nowMs, airMeasure.watchRejection, airSafety);
   if (health != previous && (health == SensorHealth::kFault || previous == SensorHealth::kFault)) {
     Serial.println(health == SensorHealth::kFault ? "DEFAUT capteur air" : "REPRISE capteur air");
   }
+  return health;
+}
+
+// One regulation step. Misting, light and fan stay off in phase 1
+// (RG-sorties-par-mode); the interior air in fault switches heating off, and so
+// do a hot substrate (RG-coupure-par-le-substrat) and heating for too long
+// (RG-chauffe-continue-bornee).
+void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
+              const terrarium::sensors::SubstrateReading& substrate, uint32_t nowMs) {
+  watchProbes(readings, nowMs);
+  const SensorHealth health = measureAir(nowMs);
+  const float airTemperatureC = airMeasure.temperatureC;
 
   const terrarium::control::ModePolicy policy = modeMachine.policy();
   terrarium::outputs::OutputState next{false, false, false, false};
@@ -243,15 +307,15 @@ void regulate(const terrarium::sensors::AirReading& air,
     case HeatingPolicy::kSetpoint:
       frostHeating.reset();
       floorHeating.reset();
-      next.heater = heaterFrom(activeHeating, health, air.temperatureC);
+      next.heater = heaterFrom(activeHeating, health, airTemperatureC);
       break;
     case HeatingPolicy::kSchedule:
-      next.heater = scheduledHeater(health, air.temperatureC);
+      next.heater = scheduledHeater(health, airTemperatureC);
       break;
     case HeatingPolicy::kFrostProtection:
       activeHeating.reset();
       floorHeating.reset();
-      next.heater = heaterFrom(frostHeating, health, air.temperatureC);
+      next.heater = heaterFrom(frostHeating, health, airTemperatureC);
       break;
     case HeatingPolicy::kOff:
       activeHeating.reset();
@@ -282,26 +346,42 @@ void regulate(const terrarium::sensors::AirReading& air,
     Serial.println(heatGuard.paused() ? "PAUSE chauffage apres 2 h continues"
                                       : "REPRISE chauffage");
   }
-  // With the safety off, a rejected reading still lights the LED.
+  // With the safety off, a missing air measure still lights the LED, and so
+  // does an interior probe in fault while another regulates.
+  bool interiorProbeFault = false;
+  for (uint8_t i = 0; i < kProbeCount; ++i) {
+    const auto probe = static_cast<Probe>(i);
+    interiorProbeFault = interiorProbeFault || (isInterior(probe) && probeInFault(probe));
+  }
   const bool fault = health == SensorHealth::kFault || heatGuard.paused() ||
-                     (!airSafety && rejection != AirRejection::kNone);
+                     (!airSafety && airMeasure.source == AirSource::kNone) || interiorProbeFault;
   digitalWrite(cfg::kPinStatusLed, fault ? HIGH : LOW);
 
   // TODO(phase 2): light from the NTP time when policy.lightAllowed.
   // TODO(phase 2): periodic fan cycles in ACTIF (kFanCyclePeriodMs).
-  // TODO(phase 4): misting pulses when policy.mistAllowed and air.valid.
+  // TODO(phase 4): misting pulses on airMeasure's humidity when
+  // policy.mistAllowed and health is kOk (2026-007, decision 03).
   outputs.apply(next);
 }
 
-// One line per measurement cycle, for the commissioning checks of the notice.
-// Invalid readings print as "--".
-void reportMeasures(const terrarium::sensors::AirReading& air,
-                    const terrarium::sensors::SubstrateReading& substrate) {
+// One line per measurement cycle, for the commissioning checks of the notice:
+// the air measure, then each probe. Missing or rejected readings print as "--".
+void reportMeasures(const terrarium::sensors::SubstrateReading& substrate) {
   Serial.print("MESURE air=");
-  if (air.valid) {
-    Serial.printf("%.1fC hr=%.0f%%", air.temperatureC, air.humidityRhPercent);
+  if (const char* source = terrarium::control::sourceName(airMeasure.source)) {
+    Serial.printf("%.1fC hr=%.0f%% (%s)", airMeasure.temperatureC, airMeasure.humidityRhPercent,
+                  source);
   } else {
     Serial.print("-- hr=--");
+  }
+  for (uint8_t i = 0; i < kProbeCount; ++i) {
+    Serial.printf(" %s=", terrarium::control::probeName(static_cast<Probe>(i)));
+    if (probeSamples[i].rejection == AirRejection::kNone) {
+      Serial.printf("%.1fC/%.0f%%", probeSamples[i].temperatureC,
+                    probeSamples[i].humidityRhPercent);
+    } else {
+      Serial.print("--");
+    }
   }
   Serial.print(" substrat=");
   if (substrate.valid) {
@@ -321,16 +401,22 @@ void reportMeasures(const terrarium::sensors::AirReading& air,
 
 // Hands the cycle's state to the supervision task, which publishes it when
 // the broker is reachable (RG-topics-mqtt). Never waits for the network.
-void publishState(const terrarium::sensors::AirReading& air,
-                  const terrarium::sensors::SubstrateReading& substrate, uint32_t nowMs) {
+void publishState(const terrarium::sensors::SubstrateReading& substrate, uint32_t nowMs) {
   const terrarium::outputs::OutputState& out = outputs.state();
   terrarium::supervision::StateSnapshot snapshot{};
   // A rejected reading is never published (RG-topics-mqtt).
-  snapshot.airValid = air.valid && airWatch.rejection() == AirRejection::kNone;
-  snapshot.airRejection = airWatch.rejection();
+  snapshot.airValid = airMeasure.source != AirSource::kNone;
+  snapshot.airSource = airMeasure.source;
+  snapshot.airRejection = airMeasure.cause;
   snapshot.airSafety = airSafety;
-  snapshot.airTemperatureC = air.temperatureC;
-  snapshot.airHumidityRhPercent = air.humidityRhPercent;
+  snapshot.airTemperatureC = airMeasure.temperatureC;
+  snapshot.airHumidityRhPercent = airMeasure.humidityRhPercent;
+  snapshot.combination = probeSetup.combination;
+  for (uint8_t i = 0; i < kProbeCount; ++i) {
+    snapshot.probes[i] = {probeSetup.roles[i], probeSamples[i].rejection,
+                          probeSamples[i].temperatureC, probeSamples[i].humidityRhPercent,
+                          probeInFault(static_cast<Probe>(i))};
+  }
   snapshot.substrateValid = substrate.valid;
   snapshot.substrateTemperatureC = substrate.temperatureC;
   snapshot.heater = out.heater;
@@ -459,9 +545,49 @@ void applyAirSafety(bool enabled) {
   if (terrarium::supervision::formatSafetyEvent(enabled, event, saved)) supervisor.sendEvent(event);
 }
 
-// A cmd/config: refused whole if its heat part is out of bounds
-// (RG-reglages-bornes); windows and time zone were validated by the parser.
+void printProbeSetup(const char* suffix) {
+  Serial.printf("SONDES sht45=%s dht11=%s combinaison=%s%s\r\n",
+                terrarium::control::roleName(probeSetup.roles[0]),
+                terrarium::control::roleName(probeSetup.roles[1]),
+                terrarium::control::combinationName(probeSetup.combination), suffix);
+}
+
+// Replaces the roles and combination (already validated), saves and reports
+// them (RG-sondes-d-air). The regulators keep their state: the next
+// measurement simply runs on the new air measure.
+void applyProbeSetup(const ProbeSetup& next) {
+  using terrarium::supervision::SettingOutcome;
+  probeSetup = next;
+  const bool saved =
+      settingsStore.saveProbeSetup(terrarium::control::probeSetupToStored(probeSetup));
+  printProbeSetup(saved ? " enregistrees, conservees apres coupure"
+                        : " appliquees mais non enregistrees");
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatProbeSetupEvent(
+          probeSetup, saved ? SettingOutcome::kApplied : SettingOutcome::kNotSaved, event)) {
+    supervisor.sendEvent(event);
+  }
+}
+
+// A cmd/config: refused whole if it would leave no interior probe, or if its
+// heat part is out of bounds (RG-reglages-bornes); windows and time zone were
+// validated by the parser.
 void applyConfig(const terrarium::supervision::ConfigCommand& config) {
+  const bool hasProbes = config.hasRole[0] || config.hasRole[1] || config.hasCombination;
+  ProbeSetup nextProbes = probeSetup;
+  for (uint8_t i = 0; i < kProbeCount; ++i) {
+    if (config.hasRole[i]) nextProbes.roles[i] = config.roles[i];
+  }
+  if (config.hasCombination) nextProbes.combination = config.combination;
+  if (hasProbes && !terrarium::control::isValidProbeSetup(nextProbes)) {
+    Serial.println("REFUS sondes : au moins une sonde doit rester interieure");
+    char event[terrarium::supervision::kEventSize];
+    if (terrarium::supervision::formatProbeSetupEvent(
+            nextProbes, terrarium::supervision::SettingOutcome::kNoInteriorProbe, event)) {
+      supervisor.sendEvent(event);
+    }
+    return;
+  }
   if (config.hasHeat) {
     const bool accepted = terrarium::control::isAcceptedHeatSettings(config.heat, kHeatBounds);
     applyHeatSettings(config.heat);  // Applies it, or reports the refusal.
@@ -470,6 +596,7 @@ void applyConfig(const terrarium::supervision::ConfigCommand& config) {
   if (config.hasWindows) applyTimeWindows(config.windows);
   if (config.hasTimezone) applyTimezone(config.timezone);
   if (config.hasAirSafety) applyAirSafety(config.airSafety);
+  if (hasProbes) applyProbeSetup(nextProbes);
 }
 
 // Commands received over MQTT, applied here, in the regulation loop.
@@ -559,6 +686,39 @@ bool handleScheduleLine(const char* line) {
   return false;
 }
 
+// SONDES, SONDE and COMBINAISON on the serial link. Returns false if `line` is
+// none of them.
+bool handleProbeLine(const char* line) {
+  ProbeSetup next = probeSetup;
+  switch (terrarium::control::parseProbeCommand(line, probeSetup, next)) {
+    case SettingCommand::kShow:
+      printProbeSetup(" actuelles");
+      return true;
+    case SettingCommand::kSet:
+      applyProbeSetup(next);
+      return true;
+    case SettingCommand::kInvalid:
+      Serial.println(
+          "REFUS sondes : SONDE <sht45|dht11> <INTERIEURE|EXTERIEURE> ou COMBINAISON "
+          "<priorite-sht45|priorite-dht11|moyenne|plus-froide>, au moins une sonde interieure");
+      return true;
+    case SettingCommand::kNone:
+      break;
+  }
+  return false;
+}
+
+// Restores the saved roles and combination if valid, else the firmware's
+// (RG-mode-au-demarrage): the SHT45 alone interior.
+void restoreProbeSetup() {
+  uint8_t stored = 0;
+  if (settingsStore.loadProbeSetup(stored) &&
+      !terrarium::control::probeSetupFromStored(stored, probeSetup)) {
+    Serial.println("INFO sondes enregistrees invalides, sondes du firmware");
+  }
+  printProbeSetup(" au demarrage");
+}
+
 // Restores the saved setpoint and hysteresis if they are within the bounds of
 // this firmware, else keeps its defaults (RG-mode-au-demarrage).
 void restoreHeatSettings() {
@@ -589,11 +749,12 @@ void handleSerialLine(const char* line) {
     return;
   }
   if (handleScheduleLine(line)) return;
+  if (handleProbeLine(line)) return;
   Mode target = modeMachine.mode();
   if (!terrarium::control::parseModeCommand(line, target)) {
     Serial.println(
         "ERREUR commande inconnue (MODE ACTIF|PLAGES|HIBERNATION|MAINTENANCE, PLAGES, FUSEAU, "
-        "WIFI CONFIGURER)");
+        "SONDES, SONDE, COMBINAISON, WIFI CONFIGURER)");
     return;
   }
   applyMode(target);
@@ -655,10 +816,12 @@ void setup() {
   Wire.begin(cfg::kPinI2cSda, cfg::kPinI2cScl);
   if (!airSensor.begin()) Serial.println("ABSENT capteur air");
   if (!substrateSensor.begin()) Serial.println("ABSENTE sonde substrat (optionnelle)");
+  dhtSensor.begin();  // Optional: an absent DHT11 reads as a silent probe.
 
   restoreMode();
   restoreHeatSettings();
   restoreAirSafety();
+  restoreProbeSetup();
   restoreSchedule();
 
   // Supervision: started last, in its own task, and none of it is awaited.
@@ -675,11 +838,11 @@ void loop() {
   if (!firstReadDone || nowMs - lastSensorReadMs >= cfg::kSensorPeriodMs) {
     firstReadDone = true;
     lastSensorReadMs = nowMs;
-    const terrarium::sensors::AirReading air = airSensor.read();
+    const terrarium::sensors::AirReading air[kProbeCount] = {airSensor.read(), dhtSensor.read()};
     const terrarium::sensors::SubstrateReading substrate = substrateSensor.read();
     regulate(air, substrate, nowMs);
-    reportMeasures(air, substrate);
-    publishState(air, substrate, nowMs);
+    reportMeasures(substrate);
+    publishState(substrate, nowMs);
   }
 
   pollTimeSync();

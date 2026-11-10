@@ -6,7 +6,10 @@
 #include "state_message.h"
 
 using terrarium::control::AirRejection;
+using terrarium::control::AirSource;
 using terrarium::control::Mode;
+using terrarium::control::ProbeCombination;
+using terrarium::control::ProbeRole;
 using terrarium::control::TimeWindows;
 using terrarium::supervision::formatState;
 using terrarium::supervision::StateSnapshot;
@@ -29,6 +32,10 @@ StateSnapshot sample() {
   s.substrateTemperatureC = 20.5f;
   s.airRejection = AirRejection::kNone;
   s.airSafety = true;
+  s.airSource = AirSource::kSht45;
+  s.combination = ProbeCombination::kPrioritySht45;
+  s.probes[0] = {ProbeRole::kInterior, AirRejection::kNone, 19.24f, 84.4f, false};
+  s.probes[1] = {ProbeRole::kExterior, AirRejection::kNone, 11.0f, 61.0f, false};
   s.heater = true;
   s.mode = Mode::kActive;
   s.setpointC = 19.0f;
@@ -54,15 +61,21 @@ void test_formats_the_whole_state() {
   char out[terrarium::supervision::kStateSize];
   TEST_ASSERT_GREATER_THAN(0, formatState(sample(), out, sizeof(out)));
   TEST_ASSERT_EQUAL_STRING(
-      "{\"air\":{\"temperature\":19.2,\"humidite\":84},\"substrat\":{\"temperature\":20.5},"
+      "{\"air\":{\"temperature\":19.2,\"humidite\":84},\"sonde_retenue\":\"sht45\","
+      "\"sondes\":{\"sht45\":{\"role\":\"interieure\",\"temperature\":19.2,\"humidite\":84,"
+      "\"cause\":null,\"defaut\":false},\"dht11\":{\"role\":\"exterieure\",\"temperature\":11.0,"
+      "\"humidite\":61,\"cause\":null,\"defaut\":false}},"
+      "\"substrat\":{\"temperature\":20.5},"
       "\"sorties\":{\"chauffage\":true,\"eclairage\":false,\"pompe\":false,\"ventilateur\":false},"
       "\"mode\":\"ACTIF\",\"consigne\":19.0,\"hysteresis\":0.5,\"defaut_capteur\":false,"
-      "\"cause_mesure_air\":null,\"mise_en_securite\":{\"air\":true},\"pause_chauffage\":false,"
+      "\"cause_mesure_air\":null,\"mise_en_securite\":{\"air\":true},"
+      "\"combinaison\":\"priorite-sht45\",\"pause_chauffage\":false,"
       "\"coupure_substrat\":false,\"uptime_s\":3600,\"version\":\"phase-1.1\","
       "\"plages\":[\"01:35-06:30\",\"14:05-17:05\"],\"fuseau\":\"CET-1CEST,M3.5.0,M10.5.0/3\","
       "\"heure_connue\":true,\"en_plage\":false,"
       "\"bornes\":{\"consigne\":[15.0,22.0],\"hysteresis\":[0.2,2.0],\"somme_max\":24.0,"
-      "\"plages_max\":4,\"fuseau_max\":47}}",
+      "\"plages_max\":4,\"fuseau_max\":47,"
+      "\"combinaisons\":[\"priorite-sht45\",\"priorite-dht11\",\"moyenne\",\"plus-froide\"]}}",
       out);
 }
 
@@ -71,7 +84,7 @@ void test_unknown_time_has_no_window_state() {
   StateSnapshot s = sample();
   s.timeKnown = false;
   s.windows = TimeWindows{0, {}};
-  char out[768];
+  char out[terrarium::supervision::kStateSize];
   TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"plages\":[],"));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"heure_connue\":false,\"en_plage\":null,\"bornes\":"));
@@ -96,11 +109,16 @@ void test_longest_state_fits() {
   s.firmwareVersion = "phase-12.34-567-gabcdef0-dirty";
   s.airRejection = AirRejection::kTemperatureOutOfRange;
   s.airSafety = false;
+  s.airSource = AirSource::kAverage;
+  s.combination = ProbeCombination::kPrioritySht45;
+  for (auto& probe : s.probes) {
+    probe = {ProbeRole::kExterior, AirRejection::kNone, -10.5f, 100.0f, false};
+  }
   char out[terrarium::supervision::kStateSize];
   const size_t length = formatState(s, out, sizeof(out));
   TEST_MESSAGE(out);
   TEST_ASSERT_GREATER_THAN(0, length);
-  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"fuseau_max\":47}}"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"plus-froide\"]}}"));
 }
 
 void test_invalid_readings_are_null() {
@@ -108,7 +126,7 @@ void test_invalid_readings_are_null() {
   s.airValid = false;
   s.substrateValid = false;
   s.sensorFault = true;
-  char out[512];
+  char out[terrarium::supervision::kStateSize];
   formatState(s, out, sizeof(out));
   TEST_ASSERT_NOT_NULL(strstr(out, "\"air\":{\"temperature\":null,\"humidite\":null}"));
   TEST_ASSERT_NOT_NULL(strstr(out, "\"substrat\":{\"temperature\":null}"));
@@ -141,7 +159,7 @@ void test_rejected_reading_names_its_cause() {
 void test_unsafe_version_is_not_copied() {
   StateSnapshot s = sample();
   s.firmwareVersion = "v1\"}";
-  char out[512];
+  char out[terrarium::supervision::kStateSize];
   formatState(s, out, sizeof(out));
   TEST_ASSERT_NOT_NULL(strstr(out, "\"version\":\"inconnue\""));
   s.firmwareVersion = nullptr;
@@ -154,6 +172,36 @@ void test_too_small_buffer_gives_zero() {
   TEST_ASSERT_EQUAL_size_t(0, formatState(sample(), out, sizeof(out)));
 }
 
+// RG-topics-mqtt (2026-007): each probe, its role, and the one that decides.
+void test_publishes_each_probe_and_the_retained_one() {
+  StateSnapshot s = sample();
+  s.airSource = AirSource::kDht11;
+  s.airTemperatureC = 16.0f;
+  s.airHumidityRhPercent = 80.0f;
+  s.combination = ProbeCombination::kColdest;
+  s.probes[0] = {ProbeRole::kInterior, AirRejection::kHumidityOutOfRange, 15.2f, 102.0f, true};
+  s.probes[1] = {ProbeRole::kInterior, AirRejection::kNone, 16.0f, 80.0f, false};
+  char out[terrarium::supervision::kStateSize];
+  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(
+      strstr(out, "\"air\":{\"temperature\":16.0,\"humidite\":80},\"sonde_retenue\":\"dht11\""));
+  // A rejected reading is never published: null, with its cause.
+  TEST_ASSERT_NOT_NULL(
+      strstr(out,
+             "\"sht45\":{\"role\":\"interieure\",\"temperature\":null,\"humidite\":null,"
+             "\"cause\":\"humidite-hors-plage\",\"defaut\":true}"));
+  TEST_ASSERT_NOT_NULL(strstr(out, "\"combinaison\":\"plus-froide\""));
+}
+
+void test_no_retained_probe_is_null() {
+  StateSnapshot s = sample();
+  s.airValid = false;
+  s.airSource = AirSource::kNone;
+  char out[terrarium::supervision::kStateSize];
+  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(strstr(out, "\"sonde_retenue\":null,"));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_formats_the_whole_state);
@@ -164,5 +212,7 @@ int main() {
   RUN_TEST(test_too_small_buffer_gives_zero);
   RUN_TEST(test_unknown_time_has_no_window_state);
   RUN_TEST(test_longest_state_fits);
+  RUN_TEST(test_publishes_each_probe_and_the_retained_one);
+  RUN_TEST(test_no_retained_probe_is_null);
   return UNITY_END();
 }

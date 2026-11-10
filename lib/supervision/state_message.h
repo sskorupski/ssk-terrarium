@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "air_probes.h"
 #include "heat_settings.h"
 #include "mode_machine.h"
 #include "posix_tz.h"
@@ -14,16 +15,28 @@
 namespace terrarium::supervision {
 
 // Largest state JSON: four windows, the longest time zone, the longest cause
-// of rejection and the bounds fit (test_longest_state_fits).
-constexpr size_t kStateSize = 704;
+// of rejection, both probes and the bounds fit (test_longest_state_fits).
+constexpr size_t kStateSize = 1152;
+
+// One air probe as published in "sondes" (RG-topics-mqtt, cadrage 2026-007).
+struct ProbeState {
+  control::ProbeRole role;
+  control::AirRejection rejection;  // kNone: the reading is accepted and published.
+  float temperatureC;
+  float humidityRhPercent;
+  bool fault;  // Rejected for more than 2 minutes (RG-capteur-en-defaut).
+};
 
 // What the regulation loop hands to the supervision task, every cycle.
 struct StateSnapshot {
-  bool airValid;
+  bool airValid;  // An interior probe gives the air measure (RG-sondes-d-air).
   float airTemperatureC;
   float airHumidityRhPercent;
-  control::AirRejection airRejection;  // Why the last air reading was rejected, if it was.
-  bool airSafety;                      // The owner keeps the air sensor's safety on.
+  control::AirSource airSource;        // "sonde_retenue".
+  control::AirRejection airRejection;  // "cause_mesure_air": the priority interior probe's.
+  bool airSafety;                      // The owner keeps the interior air's safety on.
+  control::ProbeCombination combination;
+  ProbeState probes[control::kProbeCount];  // Indexed by control::Probe.
   bool substrateValid;
   float substrateTemperatureC;
   bool heater;

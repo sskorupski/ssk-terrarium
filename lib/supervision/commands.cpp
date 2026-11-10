@@ -16,6 +16,26 @@ constexpr char kWindowsField[] = "plages";
 constexpr char kTimezoneField[] = "fuseau";
 constexpr char kSafetyField[] = "mise_en_securite";
 constexpr char kAirSensor[] = "air";
+constexpr char kProbesField[] = "sondes";
+constexpr char kCombinationField[] = "combinaison";
+
+// {"sht45": "interieure"|"exterieure", "dht11": ...}, at least one probe.
+bool parseProbes(JsonVariantConst value, ConfigCommand& out) {
+  if (!value.is<JsonObjectConst>()) return false;
+  const JsonObjectConst object = value.as<JsonObjectConst>();
+  if (object.size() == 0) return false;
+  for (JsonPairConst pair : object) {
+    control::Probe probe = control::Probe::kSht45;
+    control::ProbeRole role = control::ProbeRole::kInterior;
+    if (!control::parseProbe(pair.key().c_str(), probe) || !pair.value().is<const char*>() ||
+        !control::parseRole(pair.value().as<const char*>(), role)) {
+      return false;
+    }
+    out.hasRole[static_cast<uint8_t>(probe)] = true;
+    out.roles[static_cast<uint8_t>(probe)] = role;
+  }
+  return true;
+}
 
 // {"air": true|false}: the only sensor with a safety today.
 bool parseSafety(JsonVariantConst value, bool& out) {
@@ -100,6 +120,18 @@ ConfigError parseConfigPayload(const uint8_t* payload, size_t length,
       next.hasAirSafety = true;
       continue;
     }
+    if (std::strcmp(key, kProbesField) == 0) {
+      if (!parseProbes(field.value(), next)) return ConfigError::kBadProbes;
+      continue;
+    }
+    if (std::strcmp(key, kCombinationField) == 0) {
+      if (!field.value().is<const char*>() ||
+          !control::parseCombination(field.value().as<const char*>(), next.combination)) {
+        return ConfigError::kBadCombination;
+      }
+      next.hasCombination = true;
+      continue;
+    }
     float* target = nullptr;
     if (std::strcmp(key, kSetpointField) == 0) {
       target = &next.heat.setpointC;
@@ -135,6 +167,10 @@ const char* describe(ConfigError error) {
       return "fuseau invalide";
     case ConfigError::kBadSafety:
       return "mise en securite invalide";
+    case ConfigError::kBadProbes:
+      return "sondes invalides";
+    case ConfigError::kBadCombination:
+      return "combinaison invalide";
   }
   return "commande invalide";
 }
@@ -194,6 +230,23 @@ bool formatSafetyEvent(bool airSafety, char (&out)[kEventSize], bool saved) {
                     "{\"evenement\":\"reglage\",\"mise_en_securite\":{\"air\":%s},"
                     "\"resultat\":\"%s\"}",
                     airSafety ? "true" : "false", saved ? "applique" : "applique_non_enregistre"),
+      sizeof(out));
+}
+
+bool formatProbeSetupEvent(const control::ProbeSetup& setup, SettingOutcome outcome,
+                           char (&out)[kEventSize]) {
+  const char* result = "\"applique\"";
+  if (outcome == SettingOutcome::kNotSaved) result = "\"applique_non_enregistre\"";
+  if (outcome == SettingOutcome::kNoInteriorProbe) {
+    result = "\"refuse\",\"raison\":\"aucune sonde interieure\"";
+  }
+  return fits(
+      std::snprintf(out, sizeof(out),
+                    "{\"evenement\":\"reglage\",\"sondes\":{\"%s\":\"%s\",\"%s\":\"%s\"},"
+                    "\"combinaison\":\"%s\",\"resultat\":%s}",
+                    control::probeName(control::Probe::kSht45), control::roleName(setup.roles[0]),
+                    control::probeName(control::Probe::kDht11), control::roleName(setup.roles[1]),
+                    control::combinationName(setup.combination), result),
       sizeof(out));
 }
 
