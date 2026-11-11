@@ -34,10 +34,17 @@
 #include "supervisor.h"
 #include "time_windows.h"
 #include "ventilation.h"
+#include "update_command.h"
 
 // Set by outils/version_firmware.py from `git describe`.
 #ifndef FIRMWARE_VERSION
 #define FIRMWARE_VERSION "inconnue"
+#endif
+
+// The owner's minisign public key, set by outils/cle_mise_a_jour.py from
+// outils/mise-a-jour.pub (RG-image-signee). No firmware without it.
+#ifndef UPDATE_PUBLIC_KEY
+#error "UPDATE_PUBLIC_KEY manquante : outils/mise-a-jour.pub, voir outils/cle-mise-a-jour.sh"
 #endif
 
 namespace cfg = terrarium::config;
@@ -70,8 +77,8 @@ namespace {
 // Mode at power-up when NVS holds no valid one (RG-mode-au-demarrage).
 constexpr Mode kFallbackBootMode = Mode::kMaintenance;
 
-// Longest serial command line, terminator included.
-constexpr size_t kSerialLineSize = 64;  // "PLAGES " and four windows: 54.
+// Longest serial command line, terminator included: "licence " and a token.
+constexpr size_t kSerialLineSize = 8 + terrarium::update::kLicenceSize;
 
 // All objects are static: nothing is allocated once loop() runs.
 terrarium::outputs::Outputs outputs({cfg::kPinHeaterRelay, cfg::kPinLightRelay, cfg::kPinMistPump,
@@ -389,6 +396,15 @@ void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
   const bool fault = health == SensorHealth::kFault || heatGuard.paused() ||
                      (!airSafety && airMeasure.source == AirSource::kNone) || interiorProbeFault;
   digitalWrite(cfg::kPinStatusLed, fault ? HIGH : LOW);
+
+  // No remote update while a fault is under way, and one under way stops
+  // (RG-mise-a-jour-refusee-pendant-un-defaut).
+  bool anyProbeFault = false;
+  for (uint8_t i = 0; i < kProbeCount; ++i) {
+    anyProbeFault = anyProbeFault || probeInFault(static_cast<Probe>(i));
+  }
+  supervisor.setUpdateFault(health == SensorHealth::kFault || anyProbeFault || !substrate.valid ||
+                            substrateCap.cut() || heatGuard.paused());
 
   // TODO(phase 2): light from the NTP time when policy.lightAllowed.
   next.fan =
@@ -863,7 +879,26 @@ void restoreAirSafety() {
   if (!airSafety) Serial.println("ATTENTION securite capteur air DESACTIVEE");
 }
 
+// "licence <jeton>": the Skaron licence, never printed back
+// (RG-mise-a-jour-a-distance). Returns false if `line` is not this command.
+bool handleLicenceLine(const char* line) {
+  static char licence[terrarium::update::kLicenceSize];
+  switch (terrarium::update::parseLicenceLine(line, licence)) {
+    case terrarium::update::LicenceLine::kNone:
+      return false;
+    case terrarium::update::LicenceLine::kInvalid:
+      Serial.println("REFUS licence : jeton vide, trop long ou invalide");
+      return true;
+    case terrarium::update::LicenceLine::kValid:
+      supervisor.setUpdateLicence(licence);  // Prints and publishes the outcome.
+      std::memset(licence, 0, sizeof(licence));
+      return true;
+  }
+  return false;
+}
+
 void handleSerialLine(const char* line) {
+  if (handleLicenceLine(line)) return;
   if (terrarium::control::isWifiPortalCommand(line)) {
     supervisor.requestPortal();
     Serial.println("WIFI ouverture du reseau de configuration demandee");
@@ -876,7 +911,7 @@ void handleSerialLine(const char* line) {
   if (!terrarium::control::parseModeCommand(line, target)) {
     Serial.println(
         "ERREUR commande inconnue (MODE ACTIF|PLAGES|HIBERNATION|MAINTENANCE, PLAGES, FUSEAU, "
-        "SONDES, SONDE, COMBINAISON, VENTILATION, WIFI CONFIGURER)");
+        "SONDES, SONDE, COMBINAISON, VENTILATION, WIFI CONFIGURER, LICENCE)");
     return;
   }
   applyMode(target);
@@ -902,6 +937,7 @@ void pollSerial() {
     } else if (serialLineLength > 0) {
       handleSerialLine(serialLine);
     }
+    std::memset(serialLine, 0, serialLineLength);  // A licence does not linger.
     serialLineLength = 0;
     serialLineOverflow = false;
   }
@@ -950,7 +986,7 @@ void setup() {
   fanScheduler.restart(millis());
 
   // Supervision: started last, in its own task, and none of it is awaited.
-  supervisor.begin();
+  supervisor.begin(FIRMWARE_VERSION, UPDATE_PUBLIC_KEY);
   notifier.begin();
 
   Serial.println("=== pret : regulation en cours ===");
@@ -974,6 +1010,9 @@ void loop() {
   pollTimeSync();
   pollSerial();
   pollRemoteCommands();
+  // A new firmware validates itself, or returns to the old one
+  // (RG-retour-arriere-automatique).
+  supervisor.watchUpdate(nowMs, airMeasure.source != AirSource::kNone);
   notifier.loop();
   delay(10);
 }

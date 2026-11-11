@@ -25,6 +25,29 @@ constexpr char kProbeSetupKey[] = "sondes";
 constexpr char kFanKey[] = "ventilation";
 constexpr size_t kFanStoredSize = 6;
 
+constexpr char kUpdateLicenceKey[] = "licence_maj";
+constexpr char kUpdateAttemptKey[] = "maj_tentee";
+
+// A string key of at most size - 1 characters; false if absent or empty.
+template <size_t N>
+bool loadString(const char* key, char (&out)[N]) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  char stored[N] = {};
+  const bool found = preferences.isKey(key) && preferences.getString(key, stored, N) > 0;
+  preferences.end();
+  if (found) std::memcpy(out, stored, N);
+  return found;
+}
+
+bool saveString(const char* key, const char* value) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool written = preferences.putString(key, value) == std::strlen(value);
+  preferences.end();
+  return written;
+}
+
 }  // namespace
 
 // TODO(phase 2): Preferences in namespace "terrarium", with a schema version and
@@ -220,6 +243,31 @@ bool SettingsStore::loadOrCreateApPassword(char (&out)[supervision::kApPasswordL
   preferences.end();
   std::memcpy(out, stored, sizeof(out));
   return ok;
+}
+
+bool SettingsStore::loadUpdateLicence(char (&out)[update::kLicenceSize]) {
+  return loadString(kUpdateLicenceKey, out);
+}
+
+bool SettingsStore::saveUpdateLicence(const char* licence) {
+  return saveString(kUpdateLicenceKey, licence);
+}
+
+bool SettingsStore::loadUpdateAttempt(char (&out)[update::kVersionTextSize]) {
+  return loadString(kUpdateAttemptKey, out);
+}
+
+bool SettingsStore::saveUpdateAttempt(const char* version) {
+  return saveString(kUpdateAttemptKey, version);
+}
+
+bool SettingsStore::clearUpdateAttempt() {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool cleared =
+      !preferences.isKey(kUpdateAttemptKey) || preferences.remove(kUpdateAttemptKey);
+  preferences.end();
+  return cleared;
 }
 
 }  // namespace terrarium::storage

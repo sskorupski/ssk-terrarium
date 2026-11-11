@@ -17,7 +17,10 @@
 
 namespace terrarium::mqtt {
 
-enum class CommandTopic : uint8_t { kMode, kConfig };
+enum class CommandTopic : uint8_t { kMode, kConfig, kUpdate };
+
+// "cmd/mode", "cmd/config" or "cmd/mise-a-jour".
+const char* commandSubtopic(CommandTopic topic);
 
 // Called from loop() for each command that passed the CommandGate.
 using CommandHandler = std::function<void(CommandTopic, const uint8_t*, size_t)>;
@@ -65,6 +68,7 @@ class MqttLink {
   char eventTopic_[supervision::kTopicSize] = {};
   char modeTopic_[supervision::kTopicSize] = {};
   char configTopic_[supervision::kTopicSize] = {};
+  char updateTopic_[supervision::kTopicSize] = {};
 };
 
 }  // namespace terrarium::mqtt

@@ -26,7 +26,10 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-ci.txt
       - name: Install tools
-        run: pip install -r requirements-ci.txt
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsodium-dev pkg-config  # Host tests of minisign.
+          pip install -r requirements-ci.txt
       - name: Format
         run: clang-format --dry-run --Werror src/*.cpp lib/*/*.h lib/*/*.cpp include/*.h test/*/*.cpp
       - uses: actions/cache@v6.1.0

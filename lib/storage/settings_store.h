@@ -10,6 +10,7 @@
 #include "posix_tz.h"
 #include "time_windows.h"
 #include "ventilation.h"
+#include "update_command.h"
 
 namespace terrarium::storage {
 
@@ -76,6 +77,18 @@ class SettingsStore {
   // Password of the configuration access point: drawn at the first boot,
   // then kept. Returns false only if NVS cannot be written.
   bool loadOrCreateApPassword(char (&out)[supervision::kApPasswordLength + 1]);
+
+  // Skaron licence of the board (RG-mise-a-jour-a-distance). loadUpdateLicence
+  // returns false, leaving `out` untouched, when none is stored. Never printed.
+  bool loadUpdateLicence(char (&out)[update::kLicenceSize]);
+  bool saveUpdateLicence(const char* licence);
+
+  // The version tried by a remote update, noted before restarting into it
+  // (RG-retour-arriere-automatique). loadUpdateAttempt returns false, leaving
+  // `out` untouched, when none is noted.
+  bool loadUpdateAttempt(char (&out)[update::kVersionTextSize]);
+  bool saveUpdateAttempt(const char* version);
+  bool clearUpdateAttempt();
 };
 
 }  // namespace terrarium::storage
