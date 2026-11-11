@@ -73,11 +73,7 @@ bool admitCheck(const Situation& situation, Refusal& out) {
 
 bool admitInstall(const Situation& situation, const SemVer& current, const SemVer& requested,
                   Refusal& out) {
-  if (situation.busy) {
-    out = Refusal::kBusy;
-  } else if (situation.fault) {
-    out = Refusal::kFault;
-  } else if (!admitCheck(situation, out)) {
+  if (!admitCheck(situation, out)) {
     return false;
   } else if (compare(requested, current) <= 0) {
     out = Refusal::kNotOffered;

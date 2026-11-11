@@ -47,6 +47,20 @@ void printHeap(const char* what) {
                 ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
 }
 
+// "MISE-A-JOUR <quand> : defaut capteur, sonde dht11".
+void printFaults(const char* when, update::UpdateFaults faults) {
+  Serial.printf("MISE-A-JOUR avertissement %s :", when);
+  const char* separator = " ";
+  for (uint8_t bit = 0; bit < 8; ++bit) {
+    const update::UpdateFaults fault = static_cast<update::UpdateFaults>(1U << bit);
+    const char* name = update::faultName(fault);
+    if ((faults & fault) == 0 || name == nullptr) continue;
+    Serial.printf("%s%s", separator, name);
+    separator = ", ";
+  }
+  Serial.print("\r\n");
+}
+
 void versionText(const update::SemVer& version, char (&out)[update::kVersionTextSize]) {
   if (!update::format(version, out)) std::strcpy(out, "?");
 }
@@ -163,8 +177,7 @@ void Updater::refuse(Refusal refusal) {
 void Updater::handle(const update::UpdateCommand& command) {
   // A firmware under verification keeps the old one as its way back: no
   // other image may overwrite it before it has validated itself.
-  const update::Situation situation{busy_.load() || pendingVerify_, fault_.load(), hasLicence(),
-                                    versionKnown_};
+  const update::Situation situation{busy_.load() || pendingVerify_, hasLicence(), versionKnown_};
   Refusal refusal = Refusal::kBusy;
   const bool admitted = command.action == update::UpdateAction::kCheck
                             ? update::admitCheck(situation, refusal)
@@ -283,7 +296,10 @@ void Updater::install(const update::SemVer& requested) {
   versionText(requested, version);
   Serial.printf("MISE-A-JOUR %s acceptee : telechargement dans la partition inactive\r\n", version);
   char event[supervision::kEventSize];
-  if (update::formatVersionEvent(update::VersionStep::kAccepted, requested, event)) send(event);
+  // A fault does not stop it: it is named (RG-mise-a-jour-pendant-un-defaut).
+  const update::UpdateFaults faults = faults_.load();
+  if (faults != 0) printFaults("acceptee malgre", faults);
+  if (update::formatAcceptedEvent(requested, faults, event)) send(event);
   printHeap("avant telechargement");
 
   Failure failure = Failure::kStalled;
@@ -354,14 +370,16 @@ bool Updater::download(const update::SemVer& requested, Failure& failure) {
   printHeap("deux connexions TLS ouvertes");
   update::ImageHash hash;
   hash.begin();
+  update::FaultWarnings warnings;
+  warnings.start(faults_.load());
   WiFiClient* stream = http.getStreamPtr();
   bool written = true;
   while (!progress.complete()) {
     const uint32_t nowMs = millis();
-    if (fault_) {
-      failure = Failure::kFault;
-      written = false;
-      break;
+    if (const update::UpdateFaults appeared = warnings.update(faults_.load())) {
+      printFaults("pendant le telechargement", appeared);
+      char event[supervision::kEventSize];
+      if (update::formatWarningEvent(requested, appeared, event)) send(event);
     }
     if (progress.stalled(nowMs)) {
       failure = Failure::kStalled;
@@ -414,10 +432,6 @@ bool Updater::download(const update::SemVer& requested, Failure& failure) {
   // Checks the ESP-IDF image format and its own SHA-256.
   if (esp_ota_end(handle) != ESP_OK) {
     failure = Failure::kBadImage;
-    return false;
-  }
-  if (fault_) {
-    failure = Failure::kFault;
     return false;
   }
   char version[update::kVersionTextSize];

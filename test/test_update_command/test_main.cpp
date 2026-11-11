@@ -148,15 +148,15 @@ void test_licence_events_never_carry_the_token() {
 
 void test_refusals_give_their_reason() {
   char event[kEventSize];
-  TEST_ASSERT_TRUE(formatRefusalEvent(Refusal::kFault, event));
+  TEST_ASSERT_TRUE(formatRefusalEvent(Refusal::kBusy, event));
   TEST_ASSERT_EQUAL_STRING(
-      "{\"evenement\":\"mise-a-jour\",\"etape\":\"refusee\",\"raison\":\"defaut en cours\"}",
+      "{\"evenement\":\"mise-a-jour\",\"etape\":\"refusee\",\"raison\":\"mise a jour en "
+      "cours\"}",
       event);
   const struct {
     Refusal refusal;
     const char* reason;
-  } reasons[] = {{Refusal::kFault, "defaut en cours"},
-                 {Refusal::kBusy, "mise a jour en cours"},
+  } reasons[] = {{Refusal::kBusy, "mise a jour en cours"},
                  {Refusal::kNoLicence, "sans licence"},
                  {Refusal::kNotOffered, "version non proposee"},
                  {Refusal::kLicenceRefused, "licence refusee"},
@@ -174,9 +174,11 @@ void test_steps_carry_their_version() {
   const struct {
     VersionStep step;
     const char* name;
-  } steps[] = {{VersionStep::kAvailable, "disponible"}, {VersionStep::kUpToDate, "a-jour"},
-               {VersionStep::kAccepted, "acceptee"},    {VersionStep::kRestart, "redemarrage"},
-               {VersionStep::kValidated, "validee"},    {VersionStep::kCancelled, "annulee"}};
+  } steps[] = {{VersionStep::kAvailable, "disponible"},
+               {VersionStep::kUpToDate, "a-jour"},
+               {VersionStep::kRestart, "redemarrage"},
+               {VersionStep::kValidated, "validee"},
+               {VersionStep::kCancelled, "annulee"}};
   for (const auto& s : steps) {
     TEST_ASSERT_TRUE(formatVersionEvent(s.step, version("1.3.0"), event));
     TEST_ASSERT_EQUAL_STRING((std::string("{\"evenement\":\"mise-a-jour\",\"etape\":\"") + s.name +
@@ -211,8 +213,7 @@ void test_failures_give_their_reason() {
   const struct {
     Failure failure;
     const char* reason;
-  } reasons[] = {{Failure::kFault, "defaut en cours"},
-                 {Failure::kStalled, "telechargement interrompu"},
+  } reasons[] = {{Failure::kStalled, "telechargement interrompu"},
                  {Failure::kBadSignature, "signature invalide"},
                  {Failure::kBadImage, "image invalide"},
                  {Failure::kTooLarge, "image trop grande"},
@@ -222,6 +223,53 @@ void test_failures_give_their_reason() {
     TEST_ASSERT_EQUAL_STRING(r.reason, describe(r.failure));
     TEST_ASSERT_TRUE(formatFailureEvent(version("65535.65535.65535"), r.failure, event));
   }
+}
+
+void test_an_acceptance_without_fault_carries_only_its_version() {
+  char event[kEventSize];
+  TEST_ASSERT_TRUE(formatAcceptedEvent(version("1.3.0"), 0, event));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"mise-a-jour\",\"etape\":\"acceptee\",\"version\":\"1.3.0\"}", event);
+}
+
+void test_an_acceptance_during_a_fault_names_it() {
+  // A fault no longer prevents an installation: it is said (RG-mise-a-jour-pendant-un-defaut).
+  char event[kEventSize];
+  TEST_ASSERT_TRUE(formatAcceptedEvent(version("1.3.0"), kDht11Fault | kSubstrateRejected, event));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"mise-a-jour\",\"etape\":\"acceptee\",\"version\":\"1.3.0\","
+      "\"defauts\":[\"sonde dht11\",\"substrat rejete\"]}",
+      event);
+}
+
+void test_each_fault_has_its_name() {
+  const struct {
+    UpdateFaults fault;
+    const char* name;
+  } faults[] = {{kAirFault, "defaut capteur"},       {kSht45Fault, "sonde sht45"},
+                {kDht11Fault, "sonde dht11"},        {kSubstrateRejected, "substrat rejete"},
+                {kSubstrateCut, "coupure substrat"}, {kHeatPaused, "pause chauffe"}};
+  char event[kEventSize];
+  for (const auto& f : faults) {
+    TEST_ASSERT_TRUE(formatWarningEvent(version("1.3.0"), f.fault, event));
+    TEST_ASSERT_EQUAL_STRING(
+        (std::string("{\"evenement\":\"mise-a-jour\",\"etape\":"
+                     "\"avertissement\",\"version\":\"1.3.0\",\"defauts\":[\"") +
+         f.name + "\"]}")
+            .c_str(),
+        event);
+  }
+}
+
+void test_every_fault_at_once_fits_an_event() {
+  char event[kEventSize];
+  TEST_ASSERT_TRUE(formatWarningEvent(version("65535.65535.65535"), kAllUpdateFaults, event));
+  TEST_ASSERT_TRUE(formatAcceptedEvent(version("65535.65535.65535"), kAllUpdateFaults, event));
+}
+
+void test_a_warning_always_names_a_fault() {
+  char event[kEventSize];
+  TEST_ASSERT_FALSE(formatWarningEvent(version("1.3.0"), 0, event));
 }
 
 int main() {
@@ -238,5 +286,10 @@ int main() {
   RUN_TEST(test_steps_carry_their_version);
   RUN_TEST(test_progress_is_a_whole_percentage);
   RUN_TEST(test_failures_give_their_reason);
+  RUN_TEST(test_an_acceptance_without_fault_carries_only_its_version);
+  RUN_TEST(test_an_acceptance_during_a_fault_names_it);
+  RUN_TEST(test_each_fault_has_its_name);
+  RUN_TEST(test_every_fault_at_once_fits_an_event);
+  RUN_TEST(test_a_warning_always_names_a_fault);
   return UNITY_END();
 }

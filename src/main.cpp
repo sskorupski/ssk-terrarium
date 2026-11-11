@@ -397,14 +397,20 @@ void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
                      (!airSafety && airMeasure.source == AirSource::kNone) || interiorProbeFault;
   digitalWrite(cfg::kPinStatusLed, fault ? HIGH : LOW);
 
-  // No remote update while a fault is under way, and one under way stops
-  // (RG-mise-a-jour-refusee-pendant-un-defaut).
-  bool anyProbeFault = false;
+  // The faults under way: a remote update goes on, and names them
+  // (RG-mise-a-jour-pendant-un-defaut).
+  namespace update = terrarium::update;
+  constexpr update::UpdateFaults kProbeFaults[kProbeCount] = {update::kSht45Fault,
+                                                              update::kDht11Fault};
+  update::UpdateFaults faults = 0;
+  if (health == SensorHealth::kFault) faults |= update::kAirFault;
   for (uint8_t i = 0; i < kProbeCount; ++i) {
-    anyProbeFault = anyProbeFault || probeInFault(static_cast<Probe>(i));
+    if (probeInFault(static_cast<Probe>(i))) faults |= kProbeFaults[i];
   }
-  supervisor.setUpdateFault(health == SensorHealth::kFault || anyProbeFault || !substrate.valid ||
-                            substrateCap.cut() || heatGuard.paused());
+  if (!substrate.valid) faults |= update::kSubstrateRejected;
+  if (substrateCap.cut()) faults |= update::kSubstrateCut;
+  if (heatGuard.paused()) faults |= update::kHeatPaused;
+  supervisor.setUpdateFaults(faults);
 
   // TODO(phase 2): light from the NTP time when policy.lightAllowed.
   next.fan =

@@ -1,7 +1,7 @@
 // The decisions of a remote update, apart from the network and the flash:
 // which command is refused and why, what Skaron's answer means, whether the
 // signed release is the one asked for, how the download progresses, and when
-// a new firmware is valid (RG-mise-a-jour-refusee-pendant-un-defaut,
+// a new firmware is valid (RG-mise-a-jour-pendant-un-defaut,
 // RG-image-signee, RG-regulation-pendant-la-mise-a-jour,
 // RG-retour-arriere-automatique). No hardware, no allocation.
 #pragma once
@@ -21,20 +21,21 @@ namespace terrarium::update {
 constexpr char kProduct[] = "ssk-terrarium";
 constexpr char kArch[] = "esp32";
 
-// What the board knows when a command arrives.
+// What the board knows when a command arrives. A fault under way is not part
+// of it: it never prevents a check nor an installation, it is only named
+// (RG-mise-a-jour-pendant-un-defaut).
 struct Situation {
   bool busy;          // Another check or installation runs.
-  bool fault;         // A fault is under way (RG-mise-a-jour-refusee-pendant-un-defaut).
   bool hasLicence;    // A Skaron licence is held.
   bool versionKnown;  // The firmware was built from a phase tag.
 };
 
 // verifier: refused while busy, without licence or without a known version.
-// A fault does not prevent a check. Returns false and sets `out` if refused.
+// Returns false and sets `out` if refused.
 bool admitCheck(const Situation& situation, Refusal& out);
 
-// installer: refused also during a fault, and for a version that is not newer
-// than `current` (Skaron never offers one). Returns false and sets `out`.
+// installer: refused likewise, and for a version that is not newer than
+// `current` (Skaron never offers one). Returns false and sets `out`.
 bool admitInstall(const Situation& situation, const SemVer& current, const SemVer& requested,
                   Refusal& out);
 
@@ -102,6 +103,22 @@ class DownloadProgress {
   size_t received_ = 0;
   uint8_t lastStep_ = 0;
   uint32_t lastProgressMs_ = 0;
+};
+
+// The faults to warn of during a download: the whole set under way, each
+// time one appears that was not named yet.
+class FaultWarnings {
+ public:
+  void start(UpdateFaults named) { named_ = named; }
+  // 0, or the faults under way when one of them is new.
+  UpdateFaults update(UpdateFaults now) {
+    if ((now & ~named_) == 0) return 0;
+    named_ |= now;
+    return now;
+  }
+
+ private:
+  UpdateFaults named_ = 0;
 };
 
 // A new firmware is valid once it has retained an air measure and joined the

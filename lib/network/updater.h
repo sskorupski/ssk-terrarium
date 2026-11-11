@@ -41,9 +41,9 @@ class Updater {
   // run in the update task. Never blocks.
   void handle(const update::UpdateCommand& command);
 
-  // From the regulation loop, every cycle: whether a fault is under way
-  // (RG-mise-a-jour-refusee-pendant-un-defaut). Interrupts a download.
-  void setFault(bool fault) { fault_ = fault; }
+  // From the regulation loop, every cycle: the faults under way. They never
+  // stop an update; they are named (RG-mise-a-jour-pendant-un-defaut).
+  void setFaults(update::UpdateFaults faults) { faults_ = faults; }
 
   // From the regulation loop: validates a new firmware once it has retained
   // an air measure and joined the broker, or restarts into the old one after
@@ -73,8 +73,7 @@ class Updater {
   SemaphoreHandle_t licenceLock_ = nullptr;
   char licence_[update::kLicenceSize] = {};
 
-  // Fails safe until the loop has said otherwise.
-  std::atomic<bool> fault_{true};
+  std::atomic<update::UpdateFaults> faults_{0};
   std::atomic<bool> busy_{false};
   update::UpdateCommand job_{};
 
