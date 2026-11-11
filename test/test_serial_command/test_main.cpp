@@ -1,5 +1,7 @@
 #include <unity.h>
 
+#include <initializer_list>
+
 #include "mode_machine.h"
 #include "serial_command.h"
 
@@ -101,6 +103,46 @@ void test_parses_the_schedule_mode_command() {
   TEST_ASSERT_EQUAL(Mode::kSchedule, out);
 }
 
+// VENTILATION shows the settings; VENTILATION DUREE|PERIODE|HEURE changes one,
+// merged with the others. Bounds are checked by the loop (RG-reglages-bornes).
+void test_parses_the_ventilation_command() {
+  using terrarium::control::FanSettings;
+  using terrarium::control::parseFanCommand;
+  using terrarium::control::SettingCommand;
+  const FanSettings current{5, 60, 13 * 60};
+  FanSettings out = current;
+  TEST_ASSERT_EQUAL(SettingCommand::kShow, parseFanCommand("VENTILATION", current, out));
+  TEST_ASSERT_EQUAL(SettingCommand::kShow, parseFanCommand("VENTILATION\r", current, out));
+  TEST_ASSERT_EQUAL(SettingCommand::kSet, parseFanCommand("VENTILATION DUREE 10", current, out));
+  TEST_ASSERT_EQUAL_UINT16(10, out.durationMin);
+  TEST_ASSERT_EQUAL_UINT16(60, out.periodMin);
+  TEST_ASSERT_EQUAL(SettingCommand::kSet,
+                    parseFanCommand("VENTILATION PERIODE 90\r", current, out));
+  TEST_ASSERT_EQUAL_UINT16(5, out.durationMin);
+  TEST_ASSERT_EQUAL_UINT16(90, out.periodMin);
+  TEST_ASSERT_EQUAL(SettingCommand::kSet, parseFanCommand("VENTILATION HEURE 14:30", current, out));
+  TEST_ASSERT_EQUAL_UINT16(14 * 60 + 30, out.dailyMinute);
+  TEST_ASSERT_EQUAL(SettingCommand::kSet, parseFanCommand("VENTILATION DUREE 45", current, out));
+  TEST_ASSERT_EQUAL_UINT16(45, out.durationMin);
+  TEST_ASSERT_EQUAL(SettingCommand::kNone, parseFanCommand("VENTILATIONS", current, out));
+  TEST_ASSERT_EQUAL(SettingCommand::kNone, parseFanCommand("MODE ACTIF", current, out));
+}
+
+void test_rejects_a_bad_ventilation_command() {
+  using terrarium::control::FanSettings;
+  using terrarium::control::parseFanCommand;
+  using terrarium::control::SettingCommand;
+  const FanSettings current{5, 60, 13 * 60};
+  for (const char* line :
+       {"VENTILATION DUREE", "VENTILATION DUREE ", "VENTILATION DUREE dix", "VENTILATION DUREE -1",
+        "VENTILATION DUREE 5.5", "VENTILATION DUREE 99999", "VENTILATION HEURE 25:00",
+        "VENTILATION HEURE 1300", "VENTILATION VITESSE 2", "VENTILATION 5"}) {
+    FanSettings out = current;
+    TEST_ASSERT_EQUAL_MESSAGE(SettingCommand::kInvalid, parseFanCommand(line, current, out), line);
+    TEST_ASSERT_EQUAL_UINT16(5, out.durationMin);
+  }
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_parses_each_mode_command);
@@ -111,5 +153,7 @@ int main() {
   RUN_TEST(test_rejects_a_bad_windows_command);
   RUN_TEST(test_parses_the_timezone_command);
   RUN_TEST(test_parses_the_schedule_mode_command);
+  RUN_TEST(test_parses_the_ventilation_command);
+  RUN_TEST(test_rejects_a_bad_ventilation_command);
   return UNITY_END();
 }

@@ -22,6 +22,8 @@ namespace {
 constexpr terrarium::control::HeatSettingsBounds kBounds{
     cfg::kSetpointMinC, cfg::kSetpointMaxC, cfg::kHeatHysteresisMinC, cfg::kHeatHysteresisMaxC,
     cfg::kAlertTempHighC};
+constexpr terrarium::control::FanSettingsBounds kFanBounds{
+    cfg::kFanDurationMinMin, cfg::kFanDurationMaxMin, cfg::kFanPeriodMinMin, cfg::kFanPeriodMaxMin};
 
 StateSnapshot sample() {
   StateSnapshot s{};
@@ -47,6 +49,8 @@ StateSnapshot sample() {
   s.timeKnown = true;
   s.inWindow = false;
   s.bounds = kBounds;
+  s.fanSettings = {5, 60, 13 * 60};
+  s.fanBounds = kFanBounds;
   return s;
 }
 
@@ -73,9 +77,11 @@ void test_formats_the_whole_state() {
       "\"coupure_substrat\":false,\"uptime_s\":3600,\"version\":\"phase-1.1\","
       "\"plages\":[\"01:35-06:30\",\"14:05-17:05\"],\"fuseau\":\"CET-1CEST,M3.5.0,M10.5.0/3\","
       "\"heure_connue\":true,\"en_plage\":false,"
+      "\"ventilation\":{\"duree\":5,\"periode\":60,\"heure\":\"13:00\"},"
       "\"bornes\":{\"consigne\":[15.0,22.0],\"hysteresis\":[0.2,2.0],\"somme_max\":24.0,"
       "\"plages_max\":4,\"fuseau_max\":47,"
-      "\"combinaisons\":[\"priorite-sht45\",\"priorite-dht11\",\"moyenne\",\"plus-froide\"]}}",
+      "\"combinaisons\":[\"priorite-sht45\",\"priorite-dht11\",\"moyenne\",\"plus-froide\"],"
+      "\"ventilation\":{\"duree\":[1,30],\"periode\":[15,240]}}}",
       out);
 }
 
@@ -87,7 +93,8 @@ void test_unknown_time_has_no_window_state() {
   char out[terrarium::supervision::kStateSize];
   TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"plages\":[],"));
-  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"heure_connue\":false,\"en_plage\":null,\"bornes\":"));
+  TEST_ASSERT_NOT_NULL(
+      std::strstr(out, "\"heure_connue\":false,\"en_plage\":null,\"ventilation\":"));
 }
 
 // Four windows, the longest time zone, every measure and the bounds still fit
@@ -114,11 +121,13 @@ void test_longest_state_fits() {
   for (auto& probe : s.probes) {
     probe = {ProbeRole::kExterior, AirRejection::kNone, -10.5f, 100.0f, false};
   }
+  s.fanSettings = {cfg::kFanDurationMaxMin, cfg::kFanPeriodMaxMin, 23 * 60 + 59};
+  s.fanBounds = {65535, 65535, 65535, 65535};
   char out[terrarium::supervision::kStateSize];
   const size_t length = formatState(s, out, sizeof(out));
   TEST_MESSAGE(out);
   TEST_ASSERT_GREATER_THAN(0, length);
-  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"plus-froide\"]}}"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"periode\":[65535,65535]}}}"));
 }
 
 void test_invalid_readings_are_null() {
@@ -167,6 +176,20 @@ void test_unsafe_version_is_not_copied() {
   TEST_ASSERT_NOT_NULL(strstr(out, "\"version\":\"inconnue\""));
 }
 
+// RG-topics-mqtt: the ventilation settings sit next to the fan's output;
+// an invalid time of day is never published as a time.
+void test_publishes_the_ventilation() {
+  StateSnapshot s = sample();
+  s.fanSettings = {10, 90, 14 * 60 + 30};
+  char out[terrarium::supervision::kStateSize];
+  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(
+      std::strstr(out, "\"ventilation\":{\"duree\":10,\"periode\":90,\"heure\":\"14:30\"}"));
+  s.fanSettings.dailyMinute = 24 * 60;
+  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"heure\":null}"));
+}
+
 void test_too_small_buffer_gives_zero() {
   char out[32];
   TEST_ASSERT_EQUAL_size_t(0, formatState(sample(), out, sizeof(out)));
@@ -209,6 +232,7 @@ int main() {
   RUN_TEST(test_publishes_the_substrate_cut);
   RUN_TEST(test_rejected_reading_names_its_cause);
   RUN_TEST(test_unsafe_version_is_not_copied);
+  RUN_TEST(test_publishes_the_ventilation);
   RUN_TEST(test_too_small_buffer_gives_zero);
   RUN_TEST(test_unknown_time_has_no_window_state);
   RUN_TEST(test_longest_state_fits);

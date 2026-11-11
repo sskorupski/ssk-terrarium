@@ -18,6 +18,43 @@ constexpr char kSafetyField[] = "mise_en_securite";
 constexpr char kAirSensor[] = "air";
 constexpr char kProbesField[] = "sondes";
 constexpr char kCombinationField[] = "combinaison";
+constexpr char kFanField[] = "ventilation";
+constexpr char kFanDurationField[] = "duree";
+constexpr char kFanPeriodField[] = "periode";
+constexpr char kFanTimeField[] = "heure";
+
+// {"duree": minutes, "periode": minutes, "heure": "HH:MM"}, any of them, at
+// least one. Whole minutes only: 5.5, booleans and strings are refused.
+bool parseFan(JsonVariantConst value, control::FanSettingsPatch& out) {
+  if (!value.is<JsonObjectConst>()) return false;
+  const JsonObjectConst object = value.as<JsonObjectConst>();
+  if (object.size() == 0) return false;
+  control::FanSettingsPatch patch{};
+  for (JsonPairConst pair : object) {
+    const char* key = pair.key().c_str();
+    const JsonVariantConst field = pair.value();
+    if (std::strcmp(key, kFanTimeField) == 0) {
+      const char* text = field.is<const char*>() ? field.as<const char*>() : nullptr;
+      if (text == nullptr || !control::parseClockTime(text, std::strlen(text), patch.dailyMinute)) {
+        return false;
+      }
+      patch.hasDailyMinute = true;
+      continue;
+    }
+    if (field.is<bool>() || !field.is<uint16_t>()) return false;
+    if (std::strcmp(key, kFanDurationField) == 0) {
+      patch.hasDuration = true;
+      patch.durationMin = field.as<uint16_t>();
+    } else if (std::strcmp(key, kFanPeriodField) == 0) {
+      patch.hasPeriod = true;
+      patch.periodMin = field.as<uint16_t>();
+    } else {
+      return false;
+    }
+  }
+  out = patch;
+  return true;
+}
 
 // {"sht45": "interieure"|"exterieure", "dht11": ...}, at least one probe.
 bool parseProbes(JsonVariantConst value, ConfigCommand& out) {
@@ -132,6 +169,11 @@ ConfigError parseConfigPayload(const uint8_t* payload, size_t length,
       next.hasCombination = true;
       continue;
     }
+    if (std::strcmp(key, kFanField) == 0) {
+      if (!parseFan(field.value(), next.fan)) return ConfigError::kBadFan;
+      next.hasFan = true;
+      continue;
+    }
     float* target = nullptr;
     if (std::strcmp(key, kSetpointField) == 0) {
       target = &next.heat.setpointC;
@@ -171,6 +213,8 @@ const char* describe(ConfigError error) {
       return "sondes invalides";
     case ConfigError::kBadCombination:
       return "combinaison invalide";
+    case ConfigError::kBadFan:
+      return "ventilation invalide";
   }
   return "commande invalide";
 }
@@ -258,6 +302,23 @@ bool formatProbeSetupEvent(const control::ProbeSetup& setup, SettingOutcome outc
                     control::probeName(control::Probe::kDht11), control::roleName(setup.roles[1]),
                     control::combinationName(setup.combination), result),
       sizeof(out));
+}
+
+bool formatFanSettingsEvent(const control::FanSettings& settings, SettingOutcome outcome,
+                            char (&out)[kEventSize]) {
+  const char* result = "\"applique\"";
+  if (outcome == SettingOutcome::kNotSaved) result = "\"applique_non_enregistre\"";
+  if (outcome == SettingOutcome::kInvalidFan) {
+    result = "\"refuse\",\"raison\":\"ventilation invalide\"";
+  }
+  char time[control::kClockTimeTextLength + 1] = "--:--";
+  control::formatClockTime(settings.dailyMinute, time);
+  return fits(std::snprintf(out, sizeof(out),
+                            "{\"evenement\":\"reglage\",\"ventilation\":{\"duree\":%u,"
+                            "\"periode\":%u,\"heure\":\"%s\"},\"resultat\":%s}",
+                            static_cast<unsigned>(settings.durationMin),
+                            static_cast<unsigned>(settings.periodMin), time, result),
+              sizeof(out));
 }
 
 bool formatRejectedCommandEvent(const char* subtopic, const char* reason, char (&out)[kEventSize]) {

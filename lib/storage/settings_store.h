@@ -9,6 +9,7 @@
 #include "network_settings.h"
 #include "posix_tz.h"
 #include "time_windows.h"
+#include "ventilation.h"
 
 namespace terrarium::storage {
 
@@ -60,6 +61,12 @@ class SettingsStore {
   bool saveTimeWindows(const control::TimeWindows& windows);
   bool loadTimezone(char (&out)[control::kTimezoneSize]);
   bool saveTimezone(const char* timezone);
+
+  // Duration, period and time of the ventilation, together
+  // (RG-mode-au-demarrage). loadFanSettings returns false, leaving `out`
+  // untouched, when none is stored; the caller checks the bounds itself.
+  bool loadFanSettings(control::FanSettings& out);
+  bool saveFanSettings(const control::FanSettings& settings);
 
   // Wi-Fi and broker settings (RG-configuration-wifi-sur-place). loadNetwork
   // returns false, leaving `out` untouched, when nothing valid is stored.

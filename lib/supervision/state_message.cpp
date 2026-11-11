@@ -110,16 +110,30 @@ size_t formatState(const StateSnapshot& s, char* out, size_t size) {
   }
   const char* timezone = control::isValidPosixTimezone(s.timezone) ? s.timezone : "";
   const char* inWindow = s.timeKnown ? boolText(s.inWindow) : "null";
+  // An invalid time of day is published as null, never as a time.
+  char fanTime[control::kClockTimeTextLength + 3] = "null";
+  char clock[control::kClockTimeTextLength + 1];
+  if (control::formatClockTime(s.fanSettings.dailyMinute, clock)) {
+    std::snprintf(fanTime, sizeof(fanTime), "\"%s\"", clock);
+  }
   const int tail =
       std::snprintf(out + used, size - used,
                     ",\"plages\":[%s],\"fuseau\":\"%s\",\"heure_connue\":%s,"
-                    "\"en_plage\":%s,\"bornes\":{\"consigne\":[%.1f,%.1f],"
+                    "\"en_plage\":%s,\"ventilation\":{\"duree\":%u,\"periode\":%u,\"heure\":%s},"
+                    "\"bornes\":{\"consigne\":[%.1f,%.1f],"
                     "\"hysteresis\":[%.1f,%.1f],\"somme_max\":%.1f,"
-                    "\"plages_max\":%u,\"fuseau_max\":%u,\"combinaisons\":[%s]}}",
-                    windows, timezone, boolText(s.timeKnown), inWindow, s.bounds.setpointMinC,
+                    "\"plages_max\":%u,\"fuseau_max\":%u,\"combinaisons\":[%s],"
+                    "\"ventilation\":{\"duree\":[%u,%u],\"periode\":[%u,%u]}}}",
+                    windows, timezone, boolText(s.timeKnown), inWindow,
+                    static_cast<unsigned>(s.fanSettings.durationMin),
+                    static_cast<unsigned>(s.fanSettings.periodMin), fanTime, s.bounds.setpointMinC,
                     s.bounds.setpointMaxC, s.bounds.hysteresisMinC, s.bounds.hysteresisMaxC,
                     s.bounds.stopBelowC, static_cast<unsigned>(control::kMaxTimeWindows),
-                    static_cast<unsigned>(control::kTimezoneMaxLength), combinations);
+                    static_cast<unsigned>(control::kTimezoneMaxLength), combinations,
+                    static_cast<unsigned>(s.fanBounds.durationMinMin),
+                    static_cast<unsigned>(s.fanBounds.durationMaxMin),
+                    static_cast<unsigned>(s.fanBounds.periodMinMin),
+                    static_cast<unsigned>(s.fanBounds.periodMaxMin));
   if (tail <= 0 || used + static_cast<size_t>(tail) >= size) return 0;
   return used + static_cast<size_t>(tail);
 }
