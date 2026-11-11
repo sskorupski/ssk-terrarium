@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include "air_probes.h"
+#include "day_night.h"
 #include "heat_settings.h"
 #include "mode_machine.h"
 #include "posix_tz.h"
@@ -34,7 +35,17 @@ enum class ConfigError : uint8_t {
   kBadSafety,       // "mise_en_securite" is not {"air": true|false}.
   kBadProbes,       // "sondes" is not a non-empty object of known probes and roles.
   kBadCombination,  // "combinaison" is not a known combination.
-  kBadFan,          // "ventilation" is not a non-empty object of whole minutes and "HH:MM".
+  kBadFan,          // "ventilation" is not a well-formed two-level partial object.
+  kBadDayNight,     // "jour_nuit" is not a valid day and night (RG-jour-et-nuit).
+  kBadNightHeat,    // "chauffage_nuit" is not a partial {"consigne","hysteresis"}.
+};
+
+// The fields of "chauffage_nuit"; the loop merges and checks them.
+struct NightHeatPatch {
+  bool hasSetpoint;
+  float setpointC;
+  bool hasHysteresis;
+  float hysteresisC;
 };
 
 // What a cmd/config carries. Each part is applied only if present.
@@ -57,14 +68,19 @@ struct ConfigCommand {
   // which checks the bounds (RG-ventilation-periodique, RG-reglages-bornes).
   bool hasFan;
   control::FanSettingsPatch fan;
+  bool hasDayNight;
+  control::DayNight dayNight;  // Whole, valid, seasons in date order.
+  bool hasNightHeat;
+  NightHeatPatch nightHeat;  // Merged and bounded by the loop (2026-016).
 };
 
 // cmd/config: a JSON object with any of "consigne" and "hysteresis" in C,
 // "plages" (a list of "HH:MM-HH:MM"), "fuseau" (a POSIX TZ string) and
 // "mise_en_securite" (an object whose only key, "air", is a boolean),
 // "sondes" (an object of probe names to "interieure" or "exterieure"),
-// "combinaison" (a combination name) and "ventilation" (an object of any of
-// "duree" and "periode" in whole minutes, and "heure" as "HH:MM").
+// "combinaison" (a combination name), "ventilation" (any of "jour", "nuit",
+// "hibernation" and "saturation", each partial), "jour_nuit" (whole) and
+// "chauffage_nuit" (partial), as RG-topics-mqtt writes them.
 // Missing heat fields keep their `current` value. On any error, `out` is left
 // untouched: the command is refused whole (RG-reglages-bornes).
 ConfigError parseConfigPayload(const uint8_t* payload, size_t length,
@@ -119,9 +135,12 @@ bool formatProbeSetupEvent(const control::ProbeSetup& setup, SettingOutcome outc
 // A heating pulse of the SHT45, with its reason (RG-chauffe-de-la-sht45).
 // `reason` must not be kNone.
 bool formatProbeHeatingEvent(control::HeatReason reason, char (&out)[kEventSize]);
-// The ventilation settings applied, or refused.
-bool formatFanSettingsEvent(const control::FanSettings& settings, SettingOutcome outcome,
-                            char (&out)[kEventSize]);
+// A setting too long to echo, by its field name: "ventilation", "jour_nuit".
+// `field` is a fixed string of the firmware, quoted verbatim.
+bool formatFieldEvent(const char* field, SettingOutcome outcome, char (&out)[kEventSize]);
+// The night setpoint and hysteresis applied, or refused out of bounds.
+bool formatNightHeatEvent(const control::HeatSettings& settings, bool applied,
+                          char (&out)[kEventSize]);
 // `subtopic` and `reason` are fixed strings of the firmware, quoted verbatim.
 bool formatRejectedCommandEvent(const char* subtopic, const char* reason, char (&out)[kEventSize]);
 

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+#include "day_night.h"
 #include "heat_settings.h"
 #include "identity.h"
 #include "network_settings.h"
@@ -63,11 +64,19 @@ class SettingsStore {
   bool loadTimezone(char (&out)[control::kTimezoneSize]);
   bool saveTimezone(const char* timezone);
 
-  // Duration, period and time of the ventilation, together
-  // (RG-mode-au-demarrage). loadFanSettings returns false, leaving `out`
-  // untouched, when none is stored; the caller checks the bounds itself.
-  bool loadFanSettings(control::FanSettings& out);
-  bool saveFanSettings(const control::FanSettings& settings);
+  // Ventilation, and day and night, each as the bytes of its encoder
+  // (control::encodeFanSettings, control::encodeDayNight; RG-mode-au-demarrage).
+  // load* return false, leaving `out` untouched, when nothing of that size is
+  // stored; the caller decodes and checks the bounds.
+  bool loadFanSettings(uint8_t (&out)[control::kFanStoredSize]);
+  bool saveFanSettings(const uint8_t (&stored)[control::kFanStoredSize]);
+  bool loadDayNight(uint8_t (&out)[control::kDayNightStoredSize]);
+  bool saveDayNight(const uint8_t (&stored)[control::kDayNightStoredSize]);
+
+  // Night setpoint and hysteresis of ACTIF (cadrage 2026-016), as
+  // loadHeatSettings.
+  bool loadNightHeat(control::HeatSettings& out);
+  bool saveNightHeat(const control::HeatSettings& settings);
 
   // Wi-Fi and broker settings (RG-configuration-wifi-sur-place). loadNetwork
   // returns false, leaving `out` untouched, when nothing valid is stored.

@@ -22,8 +22,23 @@ namespace {
 constexpr terrarium::control::HeatSettingsBounds kBounds{
     cfg::kSetpointMinC, cfg::kSetpointMaxC, cfg::kHeatHysteresisMinC, cfg::kHeatHysteresisMaxC,
     cfg::kAlertTempHighC};
-constexpr terrarium::control::FanSettingsBounds kFanBounds{
-    cfg::kFanDurationMinMin, cfg::kFanDurationMaxMin, cfg::kFanPeriodMinMin, cfg::kFanPeriodMaxMin};
+constexpr terrarium::control::FanSettingsBounds kFanBounds{cfg::kFanDurationMinMin,
+                                                           cfg::kFanDurationMaxMin,
+                                                           cfg::kFanPeriodMinMin,
+                                                           cfg::kFanPeriodMaxMin,
+                                                           cfg::kFanSpreadMinPercent,
+                                                           cfg::kFanSpreadMaxPercent,
+                                                           cfg::kSaturationHumidityMinPercent,
+                                                           cfg::kSaturationHumidityMaxPercent,
+                                                           cfg::kSaturationWaitMinMin,
+                                                           cfg::kSaturationWaitMaxMin,
+                                                           cfg::kSaturationPauseMinMin,
+                                                           cfg::kSaturationPauseMaxMin};
+
+using terrarium::control::DayNightMode;
+using terrarium::control::FanMode;
+using terrarium::control::Moment;
+using terrarium::control::SaturationBehaviour;
 
 StateSnapshot sample() {
   StateSnapshot s{};
@@ -49,7 +64,15 @@ StateSnapshot sample() {
   s.timeKnown = true;
   s.inWindow = false;
   s.bounds = kBounds;
-  s.fanSettings = {5, 60, 13 * 60};
+  s.nightHeat = {19.0f, 0.5f};
+  s.dayNight.mode = DayNightMode::kMetronome;
+  s.dayNight.fixed = {8 * 60, 21 * 60};
+  s.today = {8 * 60, 21 * 60};
+  s.moment = Moment::kDay;
+  s.fanSettings.day = {FanMode::kMetronome, 5, 60, 30};
+  s.fanSettings.night = s.fanSettings.day;
+  s.fanSettings.hibernation = {13 * 60, 5};
+  s.fanSettings.saturation = {false, SaturationBehaviour::kAiring, 95, 10, 5, 60};
   s.fanBounds = kFanBounds;
   return s;
 }
@@ -77,11 +100,18 @@ void test_formats_the_whole_state() {
       "\"coupure_substrat\":false,\"uptime_s\":3600,\"version\":\"phase-1.1\","
       "\"plages\":[\"01:35-06:30\",\"14:05-17:05\"],\"fuseau\":\"CET-1CEST,M3.5.0,M10.5.0/3\","
       "\"heure_connue\":true,\"en_plage\":false,"
-      "\"ventilation\":{\"duree\":5,\"periode\":60,\"heure\":\"13:00\"},"
+      "\"jour_nuit\":{\"mode\":\"metronome\",\"jour\":\"08:00-21:00\"},"
+      "\"jour_aujourdhui\":\"08:00-21:00\",\"moment\":\"jour\","
+      "\"ventilation\":{\"jour\":{\"mode\":\"metronome\",\"duree\":5,\"periode\":60,\"ecart\":30},"
+      "\"nuit\":{\"mode\":\"metronome\",\"duree\":5,\"periode\":60,\"ecart\":30},"
+      "\"hibernation\":{\"heure\":\"13:00\",\"duree\":5},\"saturation\":{\"active\":false,"
+      "\"comportement\":\"aeration\",\"humidite\":95,\"attente\":10,\"duree\":5,\"pause\":60}},"
+      "\"aeration_saturation\":false,\"chauffage_nuit\":{\"consigne\":19.0,\"hysteresis\":0.5},"
       "\"bornes\":{\"consigne\":[15.0,22.0],\"hysteresis\":[0.2,2.0],\"somme_max\":24.0,"
       "\"plages_max\":4,\"fuseau_max\":47,"
       "\"combinaisons\":[\"priorite-sht45\",\"priorite-dht11\",\"moyenne\",\"plus-froide\"],"
-      "\"ventilation\":{\"duree\":[1,30],\"periode\":[15,240]}}}",
+      "\"saisons_max\":6,\"ventilation\":{\"duree\":[1,30],\"periode\":[15,240],\"ecart\":[10,50],"
+      "\"humidite\":[80,100],\"attente\":[1,60],\"pause\":[15,240]}}}",
       out);
 }
 
@@ -93,8 +123,7 @@ void test_unknown_time_has_no_window_state() {
   char out[terrarium::supervision::kStateSize];
   TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"plages\":[],"));
-  TEST_ASSERT_NOT_NULL(
-      std::strstr(out, "\"heure_connue\":false,\"en_plage\":null,\"ventilation\":"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"heure_connue\":false,\"en_plage\":null,\"jour_nuit\":"));
 }
 
 // Four windows, the longest time zone, every measure and the bounds still fit
@@ -121,13 +150,26 @@ void test_longest_state_fits() {
   for (auto& probe : s.probes) {
     probe = {ProbeRole::kExterior, AirRejection::kNone, -10.5f, 100.0f, false};
   }
-  s.fanSettings = {cfg::kFanDurationMaxMin, cfg::kFanPeriodMaxMin, 23 * 60 + 59};
-  s.fanBounds = {65535, 65535, 65535, 65535};
+  s.dayNight.mode = DayNightMode::kSeasons;
+  s.dayNight.seasonCount = terrarium::control::kMaxSeasons;
+  for (uint8_t i = 0; i < terrarium::control::kMaxSeasons; ++i) {
+    s.dayNight.seasons[i] = {static_cast<uint16_t>(300 + i), {10 * 60 + 10, 22 * 60 + 22}};
+  }
+  s.today = {10 * 60 + 10, 22 * 60 + 22};
+  s.moment = Moment::kNight;
+  s.nightHeat = {cfg::kSetpointMaxC, cfg::kHeatHysteresisMaxC};
+  s.fanSettings.day = {FanMode::kMetronome, 65535, 65535, 65535};
+  s.fanSettings.night = s.fanSettings.day;
+  s.fanSettings.hibernation = {23 * 60 + 59, 65535};
+  s.fanSettings.saturation = {true, SaturationBehaviour::kContinuous, 65535, 65535, 65535, 65535};
+  s.saturationRunning = true;
+  s.fanBounds = {65535, 65535, 65535, 65535, 65535, 65535,
+                 65535, 65535, 65535, 65535, 65535, 65535};
   char out[terrarium::supervision::kStateSize];
   const size_t length = formatState(s, out, sizeof(out));
   TEST_MESSAGE(out);
   TEST_ASSERT_GREATER_THAN(0, length);
-  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"periode\":[65535,65535]}}}"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"pause\":[65535,65535]}}}"));
 }
 
 void test_invalid_readings_are_null() {
@@ -176,18 +218,30 @@ void test_unsafe_version_is_not_copied() {
   TEST_ASSERT_NOT_NULL(strstr(out, "\"version\":\"inconnue\""));
 }
 
-// RG-topics-mqtt: the ventilation settings sit next to the fan's output;
-// an invalid time of day is never published as a time.
-void test_publishes_the_ventilation() {
+// RG-jour-et-nuit: seasons in date order; today's day null without time; an
+// invalid hibernation time is never published as a time.
+void test_publishes_seasons_and_the_moment() {
   StateSnapshot s = sample();
-  s.fanSettings = {10, 90, 14 * 60 + 30};
+  s.dayNight.mode = DayNightMode::kSeasons;
+  s.dayNight.seasonCount = 2;
+  s.dayNight.seasons[0] = {78, {7 * 60, 20 * 60}};
+  s.dayNight.seasons[1] = {171, {6 * 60, 22 * 60}};
+  s.today = {6 * 60 + 30, 20 * 60 + 59};
+  s.moment = Moment::kNight;
+  s.fanSettings.hibernation.dailyMinute = 24 * 60;
+  s.saturationRunning = true;
   char out[terrarium::supervision::kStateSize];
   TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
   TEST_ASSERT_NOT_NULL(
-      std::strstr(out, "\"ventilation\":{\"duree\":10,\"periode\":90,\"heure\":\"14:30\"}"));
-  s.fanSettings.dailyMinute = 24 * 60;
+      std::strstr(out,
+                  "\"jour_nuit\":{\"mode\":\"saisons\",\"saisons\":[{\"debut\":\"03-20\",\"jour\":"
+                  "\"07:00-20:00\"},{\"debut\":\"06-21\",\"jour\":\"06:00-22:00\"}]},"
+                  "\"jour_aujourdhui\":\"06:30-20:59\",\"moment\":\"nuit\""));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"hibernation\":{\"heure\":null,"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"aeration_saturation\":true"));
+  s.timeKnown = false;
   TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
-  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"heure\":null}"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"jour_aujourdhui\":null"));
 }
 
 void test_too_small_buffer_gives_zero() {
@@ -232,7 +286,7 @@ int main() {
   RUN_TEST(test_publishes_the_substrate_cut);
   RUN_TEST(test_rejected_reading_names_its_cause);
   RUN_TEST(test_unsafe_version_is_not_copied);
-  RUN_TEST(test_publishes_the_ventilation);
+  RUN_TEST(test_publishes_seasons_and_the_moment);
   RUN_TEST(test_too_small_buffer_gives_zero);
   RUN_TEST(test_unknown_time_has_no_window_state);
   RUN_TEST(test_longest_state_fits);

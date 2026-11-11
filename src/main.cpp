@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_idf_version.h>
+#include <esp_random.h>
 #include <esp_task_wdt.h>
 
 #include <cstdlib>
@@ -17,6 +18,7 @@
 #include "alerts.h"
 #include "commands.h"
 #include "config.h"
+#include "day_night.h"
 #include "dht_sensor.h"
 #include "heat_guard.h"
 #include "heat_settings.h"
@@ -51,6 +53,8 @@ namespace cfg = terrarium::config;
 using terrarium::control::AirMeasure;
 using terrarium::control::AirRejection;
 using terrarium::control::AirSource;
+using terrarium::control::DayNight;
+using terrarium::control::FanPolicy;
 using terrarium::control::FanScheduler;
 using terrarium::control::FanSettings;
 using terrarium::control::HeatGuard;
@@ -61,10 +65,12 @@ using terrarium::control::HysteresisRegulator;
 using terrarium::control::kProbeCount;
 using terrarium::control::Mode;
 using terrarium::control::ModeMachine;
+using terrarium::control::Moment;
 using terrarium::control::Probe;
 using terrarium::control::ProbeRole;
 using terrarium::control::ProbeSample;
 using terrarium::control::ProbeSetup;
+using terrarium::control::SaturationVent;
 using terrarium::control::ScheduledHeating;
 using terrarium::control::SensorHealth;
 using terrarium::control::SensorWatch;
@@ -78,7 +84,9 @@ namespace {
 constexpr Mode kFallbackBootMode = Mode::kMaintenance;
 
 // Longest serial command line, terminator included: "licence " and a token.
-constexpr size_t kSerialLineSize = 8 + terrarium::update::kLicenceSize;
+// "LICENCE <token>", or "CONFIG <json>" with six seasons (2026-015).
+constexpr size_t kSerialLineSize =
+    8 + terrarium::update::kLicenceSize > 512 ? 8 + terrarium::update::kLicenceSize : 512;
 
 // All objects are static: nothing is allocated once loop() runs.
 terrarium::outputs::Outputs outputs({cfg::kPinHeaterRelay, cfg::kPinLightRelay, cfg::kPinMistPump,
@@ -118,10 +126,38 @@ constexpr terrarium::control::HeatSettingsBounds kHeatBounds{
 HeatSettings heatSettings{cfg::kSetpointC, cfg::kHeatHysteresisC};
 // Ventilation (RG-ventilation-periodique): settings within compile-time
 // bounds (RG-reglages-bornes), and the schedule restarted at each mode change.
-constexpr terrarium::control::FanSettingsBounds kFanBounds{
-    cfg::kFanDurationMinMin, cfg::kFanDurationMaxMin, cfg::kFanPeriodMinMin, cfg::kFanPeriodMaxMin};
-FanSettings fanSettings{cfg::kFanDurationMin, cfg::kFanPeriodMin, cfg::kFanDailyMinute};
-FanScheduler fanScheduler(cfg::kFanDailyMinGapMs, cfg::kFanDailyFallbackMs);
+constexpr terrarium::control::FanSettingsBounds kFanBounds{cfg::kFanDurationMinMin,
+                                                           cfg::kFanDurationMaxMin,
+                                                           cfg::kFanPeriodMinMin,
+                                                           cfg::kFanPeriodMaxMin,
+                                                           cfg::kFanSpreadMinPercent,
+                                                           cfg::kFanSpreadMaxPercent,
+                                                           cfg::kSaturationHumidityMinPercent,
+                                                           cfg::kSaturationHumidityMaxPercent,
+                                                           cfg::kSaturationWaitMinMin,
+                                                           cfg::kSaturationWaitMaxMin,
+                                                           cfg::kSaturationPauseMinMin,
+                                                           cfg::kSaturationPauseMaxMin};
+constexpr terrarium::control::FanRhythm kDefaultRhythm{terrarium::control::FanMode::kMetronome,
+                                                       cfg::kFanDurationMin, cfg::kFanPeriodMin,
+                                                       cfg::kFanSpreadPercent};
+constexpr FanSettings kDefaultFanSettings{
+    kDefaultRhythm,
+    kDefaultRhythm,
+    {cfg::kFanDailyMinute, cfg::kFanDurationMin},
+    {false, terrarium::control::SaturationBehaviour::kAiring, cfg::kSaturationHumidityPercent,
+     cfg::kSaturationWaitMin, cfg::kSaturationDurationMin, cfg::kSaturationPauseMin}};
+FanSettings fanSettings = kDefaultFanSettings;
+FanScheduler fanScheduler(cfg::kFanDailyMinGapMs, cfg::kFanDailyFallbackMs, kFanBounds, esp_random);
+SaturationVent saturationVent;
+bool fanBySaturation = false;  // The fan runs for the saturation option.
+// Day and night (RG-jour-et-nuit), and the night setpoint of ACTIF (2026-016).
+DayNight dayNight{terrarium::control::DayNightMode::kMetronome,
+                  {cfg::kDayStartMinute, cfg::kDayEndMinute},
+                  0,
+                  {}};
+HeatSettings nightHeat{cfg::kSetpointC, cfg::kHeatHysteresisC};
+Moment moment = Moment::kDay;
 HysteresisRegulator activeHeating =
     HysteresisRegulator::aroundSetpoint(cfg::kSetpointC, cfg::kHeatHysteresisC);
 HysteresisRegulator frostHeating(cfg::kFrostHeatOnBelowC, cfg::kFrostHeatOffAtC);
@@ -195,6 +231,14 @@ uint16_t minuteOfDay() {
   struct tm local{};
   localtime_r(&now, &local);
   return static_cast<uint16_t>(local.tm_hour * 60 + local.tm_min);
+}
+
+// Local day of a 365-day year; meaningful only when timeKnown.
+uint16_t dayOfYearNow() {
+  const time_t now = time(nullptr);
+  struct tm local{};
+  localtime_r(&now, &local);
+  return terrarium::control::dayOfYear(local.tm_mon + 1, local.tm_mday);
 }
 
 // Marks the time known at the first NTP answer, and reports each one.
@@ -329,8 +373,10 @@ void heatAirSensorIfDue(const terrarium::sensors::AirReading& reading, uint32_t 
 }
 
 // One regulation step. Misting and light stay off (RG-sorties-par-mode); the
-// fan airs the tank by mode, whatever the measures (RG-ventilation-periodique);
-// the interior air in fault switches heating off, and so
+// fan airs the tank by mode and moment of the day, and on saturated air if the
+// owner wants it (RG-ventilation-periodique); ACTIF heats to the setpoint of
+// the moment (RG-chauffage-par-hysteresis); the interior air in fault switches
+// heating off, and so
 // do a hot substrate (RG-coupure-par-le-substrat) and heating for too long
 // (RG-chauffe-continue-bornee).
 void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
@@ -341,6 +387,14 @@ void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
 
   const terrarium::control::ModePolicy policy = modeMachine.policy();
   terrarium::outputs::OutputState next{false, false, false, false};
+  const uint16_t minute = timeKnown ? minuteOfDay() : 0;
+  moment =
+      terrarium::control::momentAt(dayNight, timeKnown, timeKnown ? dayOfYearNow() : 0, minute);
+  // Night setpoint in ACTIF only; PLAGES heats to the day one in its windows.
+  const HeatSettings& tuning =
+      policy.heating == HeatingPolicy::kSetpoint && moment == Moment::kNight ? nightHeat
+                                                                             : heatSettings;
+  activeHeating.retune(tuning.setpointC, tuning.hysteresisC);
 
   if (policy.heating != HeatingPolicy::kSchedule) lastScheduleReport = ScheduleReport::kNone;
   switch (policy.heating) {
@@ -413,11 +467,18 @@ void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
   supervisor.setUpdateFaults(faults);
 
   // TODO(phase 2): light from the NTP time when policy.lightAllowed.
-  next.fan =
-      fanScheduler.update(nowMs, policy.fan, fanSettings, timeKnown, timeKnown ? minuteOfDay() : 0);
+  const bool byRhythm =
+      fanScheduler.update(nowMs, policy.fan, fanSettings, moment, timeKnown, minute);
+  const bool bySaturation =
+      saturationVent.update(nowMs, fanSettings.saturation, policy.fan != FanPolicy::kOff,
+                            airMeasure.source != AirSource::kNone, airMeasure.humidityRhPercent);
+  next.fan = byRhythm || bySaturation;
   if (next.fan != outputs.state().fan) {
-    Serial.println(next.fan ? "VENTILATION marche" : "VENTILATION arret");
+    const bool saturationCause = next.fan ? bySaturation && !byRhythm : fanBySaturation;
+    Serial.printf("VENTILATION %s%s\r\n", next.fan ? "marche" : "arret",
+                  saturationCause ? " (saturation)" : "");
   }
+  fanBySaturation = bySaturation && !byRhythm;
   // TODO(phase 4): misting pulses on airMeasure's humidity when
   // policy.mistAllowed and health is kOk (2026-007, decision 03).
   outputs.apply(next);
@@ -495,7 +556,12 @@ void publishState(const terrarium::sensors::SubstrateReading& substrate, uint32_
   snapshot.timeKnown = timeKnown;
   snapshot.inWindow = timeKnown && terrarium::control::inAnyWindow(timeWindows, minuteOfDay());
   snapshot.bounds = kHeatBounds;
+  snapshot.nightHeat = nightHeat;
+  snapshot.dayNight = dayNight;
+  snapshot.today = terrarium::control::dayFor(dayNight, timeKnown ? dayOfYearNow() : 0);
+  snapshot.moment = moment;
   snapshot.fanSettings = fanSettings;
+  snapshot.saturationRunning = saturationVent.running();
   snapshot.fanBounds = kFanBounds;
   supervisor.publish(snapshot);
 }
@@ -633,43 +699,99 @@ void applyProbeSetup(const ProbeSetup& next) {
   }
 }
 
-void printFanSettings(const char* suffix) {
-  char time[terrarium::control::kClockTimeTextLength + 1] = "--:--";
-  terrarium::control::formatClockTime(fanSettings.dailyMinute, time);
-  Serial.printf("VENTILATION duree=%umin periode=%umin heure=%s%s\r\n",
-                static_cast<unsigned>(fanSettings.durationMin),
-                static_cast<unsigned>(fanSettings.periodMin), time, suffix);
+void printRhythm(const char* name, const terrarium::control::FanRhythm& r) {
+  Serial.printf("VENTILATION %s %s duree=%umin periode=%umin ecart=%u%%\r\n", name,
+                terrarium::control::fanModeName(r.mode), unsigned{r.durationMin},
+                unsigned{r.periodMin}, unsigned{r.spreadPercent});
 }
 
-void refuseFanSettings(const FanSettings& candidate) {
-  Serial.println(
-      "REFUS ventilation : duree 1-30 min, periode 15-240 min, duree sous la periode, heure "
-      "HH:MM");
-  char event[terrarium::supervision::kEventSize];
-  if (terrarium::supervision::formatFanSettingsEvent(
-          candidate, terrarium::supervision::SettingOutcome::kInvalidFan, event)) {
-    supervisor.sendEvent(event);
+// Every ventilation setting, one line each (RG-ventilation-periodique).
+void printFanSettings(const char* suffix) {
+  printRhythm("jour", fanSettings.day);
+  printRhythm("nuit", fanSettings.night);
+  char time[terrarium::control::kClockTimeTextLength + 1] = "--:--";
+  terrarium::control::formatClockTime(fanSettings.hibernation.dailyMinute, time);
+  Serial.printf("VENTILATION hibernation heure=%s duree=%umin\r\n", time,
+                unsigned{fanSettings.hibernation.durationMin});
+  const terrarium::control::SaturationOption& sat = fanSettings.saturation;
+  Serial.printf(
+      "VENTILATION saturation %s %s humidite=%u%% attente=%umin duree=%umin pause=%umin%s\r\n",
+      sat.active ? "active" : "inactive", terrarium::control::behaviourName(sat.behaviour),
+      unsigned{sat.humidityPercent}, unsigned{sat.waitMin}, unsigned{sat.durationMin},
+      unsigned{sat.pauseMin}, suffix);
+}
+
+// Today's day, the moment and the setting (RG-jour-et-nuit).
+void printDayNight(const char* suffix) {
+  char day[terrarium::control::kDayWindowTextLength + 1] = "--:-----:--";
+  if (dayNight.mode == terrarium::control::DayNightMode::kMetronome) {
+    terrarium::control::formatDayWindow(dayNight.fixed, day);
+    Serial.printf("JOUR metronome %s%s\r\n", day, suffix);
+  } else {
+    Serial.printf("JOUR saisons (%u)%s\r\n", unsigned{dayNight.seasonCount}, suffix);
+    for (uint8_t i = 0; i < dayNight.seasonCount; ++i) {
+      char start[terrarium::control::kMonthDayTextLength + 1] = "--";
+      terrarium::control::formatMonthDay(dayNight.seasons[i].startDay, start);
+      terrarium::control::formatDayWindow(dayNight.seasons[i].day, day);
+      Serial.printf("JOUR saison %s %s\r\n", start, day);
+    }
   }
+  if (timeKnown) {
+    terrarium::control::formatDayWindow(terrarium::control::dayFor(dayNight, dayOfYearNow()), day);
+    Serial.printf("JOUR aujourd'hui %s, %s\r\n", day, terrarium::control::momentName(moment));
+  } else {
+    Serial.println("JOUR heure inconnue : jour");
+  }
+}
+
+void sendFieldEvent(const char* field, terrarium::supervision::SettingOutcome outcome) {
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatFieldEvent(field, outcome, event)) supervisor.sendEvent(event);
 }
 
 // Replaces the ventilation settings (already within bounds), saves and
-// reports them. The count is not restarted: they apply at the next step.
+// reports them. The next airing takes them (decision 03 of 2026-015).
 void applyFanSettings(const FanSettings& next) {
   using terrarium::supervision::SettingOutcome;
   fanSettings = next;
-  const bool saved = settingsStore.saveFanSettings(fanSettings);
-  printFanSettings(saved ? " enregistree, conservee apres coupure"
-                         : " appliquee mais non enregistree");
+  uint8_t stored[terrarium::control::kFanStoredSize];
+  terrarium::control::encodeFanSettings(fanSettings, stored);
+  const bool saved = settingsStore.saveFanSettings(stored);
+  printFanSettings(saved ? " : enregistree" : " : appliquee mais non enregistree");
+  sendFieldEvent("ventilation", saved ? SettingOutcome::kApplied : SettingOutcome::kNotSaved);
+}
+
+// Replaces the day and night (already valid), saves and reports it.
+void applyDayNight(const DayNight& next) {
+  using terrarium::supervision::SettingOutcome;
+  dayNight = next;
+  uint8_t stored[terrarium::control::kDayNightStoredSize];
+  terrarium::control::encodeDayNight(dayNight, stored);
+  const bool saved = settingsStore.saveDayNight(stored);
+  printDayNight(saved ? " : enregistre" : " : applique mais non enregistre");
+  sendFieldEvent("jour_nuit", saved ? SettingOutcome::kApplied : SettingOutcome::kNotSaved);
+}
+
+// Replaces the night setpoint (already within bounds), saves and reports it.
+void applyNightHeat(const HeatSettings& next) {
+  nightHeat = next;
+  if (settingsStore.saveNightHeat(nightHeat)) {
+    Serial.printf("CONSIGNE nuit %.1fC hysteresis %.1fC enregistree\r\n", nightHeat.setpointC,
+                  nightHeat.hysteresisC);
+  } else {
+    Serial.printf("ERREUR consigne nuit %.1fC appliquee mais non enregistree\r\n",
+                  nightHeat.setpointC);
+  }
   char event[terrarium::supervision::kEventSize];
-  if (terrarium::supervision::formatFanSettingsEvent(
-          fanSettings, saved ? SettingOutcome::kApplied : SettingOutcome::kNotSaved, event)) {
+  if (terrarium::supervision::formatNightHeatEvent(nightHeat, true, event)) {
     supervisor.sendEvent(event);
   }
 }
 
-// A cmd/config: refused whole if it would leave no interior probe, or if its
-// ventilation or heat part is out of bounds (RG-reglages-bornes); windows and
-// time zone were validated by the parser.
+// A cmd/config, or CONFIG on the serial link: refused whole if it would leave
+// no interior probe, or if its ventilation, night or day heat part is out of
+// bounds (RG-reglages-bornes); windows, time zone and day and night were
+// validated by the parser.
 void applyConfig(const terrarium::supervision::ConfigCommand& config) {
   const bool hasProbes = config.hasRole[0] || config.hasRole[1] || config.hasCombination;
   ProbeSetup nextProbes = probeSetup;
@@ -688,7 +810,20 @@ void applyConfig(const terrarium::supervision::ConfigCommand& config) {
   }
   const FanSettings nextFan = terrarium::control::merged(fanSettings, config.fan);
   if (config.hasFan && !terrarium::control::isAcceptedFanSettings(nextFan, kFanBounds)) {
-    refuseFanSettings(nextFan);
+    Serial.println("REFUS ventilation : hors bornes, ou une duree pas sous sa periode");
+    sendFieldEvent("ventilation", terrarium::supervision::SettingOutcome::kInvalidFan);
+    return;
+  }
+  HeatSettings nextNight = nightHeat;
+  if (config.nightHeat.hasSetpoint) nextNight.setpointC = config.nightHeat.setpointC;
+  if (config.nightHeat.hasHysteresis) nextNight.hysteresisC = config.nightHeat.hysteresisC;
+  if (config.hasNightHeat && !terrarium::control::isAcceptedHeatSettings(nextNight, kHeatBounds)) {
+    Serial.printf("REFUS consigne nuit %.1fC hysteresis %.1fC hors bornes\r\n", nextNight.setpointC,
+                  nextNight.hysteresisC);
+    char event[terrarium::supervision::kEventSize];
+    if (terrarium::supervision::formatNightHeatEvent(nextNight, false, event)) {
+      supervisor.sendEvent(event);
+    }
     return;
   }
   if (config.hasHeat) {
@@ -701,6 +836,8 @@ void applyConfig(const terrarium::supervision::ConfigCommand& config) {
   if (config.hasAirSafety) applyAirSafety(config.airSafety);
   if (hasProbes) applyProbeSetup(nextProbes);
   if (config.hasFan) applyFanSettings(nextFan);
+  if (config.hasDayNight) applyDayNight(config.dayNight);
+  if (config.hasNightHeat) applyNightHeat(nextNight);
 }
 
 // Commands received over MQTT, applied here, in the regulation loop.
@@ -812,43 +949,66 @@ bool handleProbeLine(const char* line) {
   return false;
 }
 
-// VENTILATION on the serial link. Returns false if `line` is not it.
-bool handleFanLine(const char* line) {
-  FanSettings next = fanSettings;
-  switch (terrarium::control::parseFanCommand(line, fanSettings, next)) {
-    case SettingCommand::kShow:
-      printFanSettings(" actuelle");
-      return true;
-    case SettingCommand::kSet:
-      if (terrarium::control::isAcceptedFanSettings(next, kFanBounds)) {
-        applyFanSettings(next);
-      } else {
-        refuseFanSettings(next);
-      }
-      return true;
-    case SettingCommand::kInvalid:
-      Serial.println(
-          "REFUS ventilation : VENTILATION DUREE <minutes>, VENTILATION PERIODE <minutes> ou "
-          "VENTILATION HEURE <HH:MM>");
-      return true;
-    case SettingCommand::kNone:
-      break;
+// CONFIG <json>, JOUR and VENTILATION on the serial link (decision 05 of
+// 2026-015). Returns false if `line` is none of them.
+bool handleSettingsLine(const char* line) {
+  if (terrarium::control::isShowCommand(line, "VENTILATION")) {
+    printFanSettings(" actuelle");
+    return true;
   }
-  return false;
+  if (terrarium::control::isShowCommand(line, "JOUR")) {
+    printDayNight(" actuel");
+    return true;
+  }
+  size_t length = 0;
+  const char* json = terrarium::control::configPayload(line, length);
+  if (json == nullptr) return false;
+  terrarium::supervision::ConfigCommand config{};
+  const terrarium::supervision::ConfigError error = terrarium::supervision::parseConfigPayload(
+      reinterpret_cast<const uint8_t*>(json), length, heatSettings, config);
+  if (error != terrarium::supervision::ConfigError::kNone) {
+    Serial.printf("REFUS CONFIG : %s\r\n", terrarium::supervision::describe(error));
+    return true;
+  }
+  applyConfig(config);
+  return true;
 }
 
-// Restores the saved ventilation settings if within the bounds of this
-// firmware, else keeps its defaults (RG-mode-au-demarrage).
+// Restores the saved ventilation, day and night, and night setpoint if within
+// the bounds of this firmware, else keeps the firmware's (RG-mode-au-demarrage).
 void restoreFanSettings() {
-  FanSettings stored{};
+  uint8_t stored[terrarium::control::kFanStoredSize];
+  FanSettings decoded{};
   if (settingsStore.loadFanSettings(stored)) {
-    if (terrarium::control::isAcceptedFanSettings(stored, kFanBounds)) {
-      fanSettings = stored;
+    if (terrarium::control::decodeFanSettings(stored, decoded) &&
+        terrarium::control::isAcceptedFanSettings(decoded, kFanBounds)) {
+      fanSettings = decoded;
     } else {
-      Serial.println("INFO ventilation enregistree hors bornes, valeurs du firmware");
+      Serial.println("INFO ventilation enregistree illisible ou hors bornes, valeurs du firmware");
     }
   }
   printFanSettings(" au demarrage");
+  uint8_t storedDay[terrarium::control::kDayNightStoredSize];
+  DayNight decodedDay{};
+  if (settingsStore.loadDayNight(storedDay)) {
+    if (terrarium::control::decodeDayNight(storedDay, decodedDay) &&
+        terrarium::control::isValidDayNight(decodedDay)) {
+      dayNight = decodedDay;
+    } else {
+      Serial.println("INFO jour et nuit enregistres illisibles, ceux du firmware");
+    }
+  }
+  printDayNight(" au demarrage");
+  HeatSettings storedNight{};
+  if (settingsStore.loadNightHeat(storedNight)) {
+    if (terrarium::control::isAcceptedHeatSettings(storedNight, kHeatBounds)) {
+      nightHeat = storedNight;
+    } else {
+      Serial.println("INFO consigne de nuit enregistree hors bornes, valeurs du firmware");
+    }
+  }
+  Serial.printf("CONSIGNE nuit %.1fC hysteresis %.1fC au demarrage\r\n", nightHeat.setpointC,
+                nightHeat.hysteresisC);
 }
 
 // Restores the saved roles and combination if valid, else the firmware's
@@ -912,12 +1072,12 @@ void handleSerialLine(const char* line) {
   }
   if (handleScheduleLine(line)) return;
   if (handleProbeLine(line)) return;
-  if (handleFanLine(line)) return;
+  if (handleSettingsLine(line)) return;
   Mode target = modeMachine.mode();
   if (!terrarium::control::parseModeCommand(line, target)) {
     Serial.println(
         "ERREUR commande inconnue (MODE ACTIF|PLAGES|HIBERNATION|MAINTENANCE, PLAGES, FUSEAU, "
-        "SONDES, SONDE, COMBINAISON, VENTILATION, WIFI CONFIGURER, LICENCE)");
+        "SONDES, SONDE, COMBINAISON, VENTILATION, JOUR, CONFIG <json>, WIFI CONFIGURER, LICENCE)");
     return;
   }
   applyMode(target);
