@@ -20,9 +20,13 @@ SemVer version(const char* text) {
   return out;
 }
 
-void assertRefusal(Refusal expected, bool admitted, Refusal actual) {
-  TEST_ASSERT_FALSE(admitted);
-  TEST_ASSERT_EQUAL_STRING(describe(expected), describe(actual));
+// The decision is taken before the refusal is read: function arguments have
+// no evaluation order, and GCC copies `refusal` before calling admit…().
+template <typename Admit>
+void assertRefusal(Refusal expected, Admit admit) {
+  Refusal refusal = Refusal::kFault == expected ? Refusal::kBusy : Refusal::kFault;
+  TEST_ASSERT_FALSE(admit(refusal));
+  TEST_ASSERT_EQUAL_STRING(describe(expected), describe(refusal));
 }
 
 Answer answer(int status, const char* json, Offer& offer, Refusal& refusal) {
@@ -53,39 +57,40 @@ void test_a_check_is_refused_only_while_busy_or_without_licence_or_version() {
   TEST_ASSERT_TRUE(admitCheck(kReady, refusal));
   // A fault does not prevent asking what Skaron offers.
   TEST_ASSERT_TRUE(admitCheck({false, true, true, true}, refusal));
-  assertRefusal(Refusal::kBusy, admitCheck({true, false, true, true}, refusal), refusal);
-  assertRefusal(Refusal::kNoLicence, admitCheck({false, false, false, true}, refusal), refusal);
-  assertRefusal(Refusal::kUnknownVersion, admitCheck({false, false, true, false}, refusal),
-                refusal);
+  assertRefusal(Refusal::kBusy,
+                [](Refusal& out) { return admitCheck({true, false, true, true}, out); });
+  assertRefusal(Refusal::kNoLicence,
+                [](Refusal& out) { return admitCheck({false, false, false, true}, out); });
+  assertRefusal(Refusal::kUnknownVersion,
+                [](Refusal& out) { return admitCheck({false, false, true, false}, out); });
+}
+
+// installer from 1.2.0 to 1.3.0 in `situation`.
+bool installFrom120(const Situation& situation, Refusal& out) {
+  return admitInstall(situation, version("1.2.0"), version("1.3.0"), out);
 }
 
 void test_an_installation_is_refused_during_a_fault() {
   Refusal refusal = Refusal::kBusy;
-  TEST_ASSERT_TRUE(admitInstall(kReady, version("1.2.0"), version("1.3.0"), refusal));
-  assertRefusal(
-      Refusal::kFault,
-      admitInstall({false, true, true, true}, version("1.2.0"), version("1.3.0"), refusal),
-      refusal);
+  TEST_ASSERT_TRUE(installFrom120(kReady, refusal));
+  assertRefusal(Refusal::kFault,
+                [](Refusal& out) { return installFrom120({false, true, true, true}, out); });
   // Busy first: the fault would only add to it.
   assertRefusal(Refusal::kBusy,
-                admitInstall({true, true, true, true}, version("1.2.0"), version("1.3.0"), refusal),
-                refusal);
-  assertRefusal(
-      Refusal::kNoLicence,
-      admitInstall({false, false, false, true}, version("1.2.0"), version("1.3.0"), refusal),
-      refusal);
-  assertRefusal(
-      Refusal::kUnknownVersion,
-      admitInstall({false, false, true, false}, version("1.2.0"), version("1.3.0"), refusal),
-      refusal);
+                [](Refusal& out) { return installFrom120({true, true, true, true}, out); });
+  assertRefusal(Refusal::kNoLicence,
+                [](Refusal& out) { return installFrom120({false, false, false, true}, out); });
+  assertRefusal(Refusal::kUnknownVersion,
+                [](Refusal& out) { return installFrom120({false, false, true, false}, out); });
 }
 
 void test_an_installation_of_a_version_not_newer_is_not_offered() {
-  Refusal refusal = Refusal::kBusy;
-  assertRefusal(Refusal::kNotOffered,
-                admitInstall(kReady, version("1.3.0"), version("1.3.0"), refusal), refusal);
-  assertRefusal(Refusal::kNotOffered,
-                admitInstall(kReady, version("1.3.0"), version("1.2.9"), refusal), refusal);
+  assertRefusal(Refusal::kNotOffered, [](Refusal& out) {
+    return admitInstall(kReady, version("1.3.0"), version("1.3.0"), out);
+  });
+  assertRefusal(Refusal::kNotOffered, [](Refusal& out) {
+    return admitInstall(kReady, version("1.3.0"), version("1.2.9"), out);
+  });
 }
 
 void test_skaron_is_asked_with_the_phase_and_version_in_place() {
