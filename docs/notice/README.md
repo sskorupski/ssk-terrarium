@@ -8,7 +8,7 @@ Le régulateur se construit phase par phase. Chaque phase ajoute du code et des 
 | --- | --- | --- | --- |
 | 0 | La carte ESP32 seule, programmée, et sa LED d'état | `phase-0` | [phase-0](phase-0/README.md) |
 | 1 | Capteurs, chauffage, hors-gel et protections : le prototype d'hiver | `phase-1` | [phase-1](phase-1/README.md) (en validation sur le montage) |
-| 2 | Éclairage à l'heure, ventilation, page web locale | `phase-2` | à venir |
+| 2 | Éclairage à l'heure, ventilation, page web locale | `phase-2` | [phase-2](phase-2/README.md) (en cours : la ventilation seule) |
 | 3 | Supervision à distance : MQTT, alertes, mise à jour par le réseau | `phase-3` | à venir |
 | 4 | Brumisation automatique | `phase-4` | à venir |
 | 5 | Historique et courbes | `phase-5` | à venir |
