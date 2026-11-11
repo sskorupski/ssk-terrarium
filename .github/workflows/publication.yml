@@ -1,6 +1,9 @@
 # Publishes a phase when its tag is pushed: phase-N, or phase-N.M for a fix
-# that keeps the wiring. The release carries the merged firmware image and the
-# notice of the phase as a PDF (docs/pratiques.md, "Livrer une phase").
+# that keeps the wiring. The release carries the merged firmware image for USB,
+# the application image alone and its SHA-256 for a remote update, and the
+# notice of the phase as a PDF (docs/pratiques.md, "Livrer une phase"). The
+# application image is signed and published to Skaron on the owner's
+# workstation, never here (outils/publier-mise-a-jour.sh, RG-image-signee).
 name: Publication
 
 on:
@@ -35,19 +38,24 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq graphviz libpango-1.0-0 libpangoft2-1.0-0
+          sudo apt-get install -y -qq graphviz libpango-1.0-0 libpangoft2-1.0-0 libsodium-dev pkg-config
           pip install -r requirements-ci.txt -r requirements-notice.txt
       - name: Native tests
         run: pio test -e native
-      - name: Firmware image
-        run: outils/firmware-fusionne.sh "ssk-terrarium-$TAG.bin"
+      - name: Firmware images
+        run: |
+          outils/firmware-fusionne.sh "ssk-terrarium-$TAG.bin"
+          # The application alone, as a remote update writes it: never the merged image.
+          cp .pio/build/esp32dev/firmware.bin "firmware-$TAG.bin"
+          sha256sum "firmware-$TAG.bin" > "firmware-$TAG.bin.sha256"
       - name: Notice
         run: python outils/notice_pdf.py "docs/notice/$PHASE" "notice-$TAG.pdf"
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" "ssk-terrarium-$TAG.bin" "notice-$TAG.pdf" \
+          gh release create "$TAG" "ssk-terrarium-$TAG.bin" "firmware-$TAG.bin" \
+            "firmware-$TAG.bin.sha256" "notice-$TAG.pdf" \
             --title "$TAG" \
-            --notes "Notice : [docs/notice/$PHASE](https://github.com/${{ github.repository }}/blob/$TAG/docs/notice/$PHASE/README.md). Téléverser \`ssk-terrarium-$TAG.bin\` à l'adresse 0x0." \
+            --notes "Notice : [docs/notice/$PHASE](https://github.com/${{ github.repository }}/blob/$TAG/docs/notice/$PHASE/README.md). Au câble : téléverser \`ssk-terrarium-$TAG.bin\` à l'adresse 0x0, ce qui efface les réglages. À distance : \`firmware-$TAG.bin\`, une fois signé et publié par \`outils/publier-mise-a-jour.sh $TAG\`." \
             --generate-notes
