@@ -40,13 +40,15 @@ Lignes de la supervision ([supervision.md](supervision.md)) : au démarrage, `WI
 
 Le capteur d'air SHT45 et la sonde du substrat sont dans le bac, au garage ; le poste de développement est au bureau, avec une carte qui n'a que le DHT11. Sur cette carte, `sht45=--` et `substrat=--` sont attendus, et le DHT11, extérieur par défaut, mesure l'air du bureau. Elle suffit pour éprouver ce qui ne dépend ni de la SHT45 ni du bac : liaison série, commandes, réglages, Wi-Fi, MQTT, portail.
 
-Le firmware n'a pas encore de mise à jour à distance (fonctionnalité `mise-a-jour` du référentiel). Tout essai qui demande la SHT45 ou le bac se fait donc au garage, le régulateur branché en USB à un portable qui a PlatformIO :
+Une version publiée et signée s'installe au garage sans câble ([supervision.md](supervision.md#mettre-à-jour-le-firmware-à-distance)). Une branche en cours, elle, n'est ni taguée ni signée : tout essai qui demande la SHT45 ou le bac se fait au garage, le régulateur branché en USB à un portable qui a PlatformIO :
 
 ```bash
 git fetch origin && git switch <branche>
 pio run -e esp32dev -t upload
 pio device monitor                  # puis le bouton EN de la carte
 ```
+
+La carte du bureau refuse toute installation à distance, `defaut en cours` : sans SHT45 ni sonde du substrat, elle a une sonde d'air en défaut et une mesure du substrat rejetée (RG-mise-a-jour-refusee-pendant-un-defaut). Un nouveau firmware n'y retient pas non plus de mesure de l'air tant que le DHT11 reste extérieur, et le démarrage reviendrait à l'ancien au bout de 5 minutes.
 
 Ouverte après le démarrage, la console ne montre que les lignes `MESURE` : les lignes qui disent pourquoi une sonde manque (`ABSENT capteur air`, `REJET mesure sht45 : <cause>`) sont déjà passées. Le bouton **EN** redémarre la carte sous les yeux de la console.
 
@@ -81,7 +83,7 @@ Le `.gv` d'un schéma ne dépend que de WireViz, alors que le `.svg` dépend aus
 - **`millis()` repasse par zéro au bout de 49,7 jours** : une durée se calcule toujours par soustraction non signée (`now - since > limit`), jamais par comparaison de deux instants.
 - **Sans `outils/mise-a-jour.pub`, le firmware ne se compile pas** (`outils/cle_mise_a_jour.py`) : une carte ne doit jamais accepter une image que le propriétaire n'a pas signée. La clé se génère une fois, par `outils/cle-mise-a-jour.sh`. Les suites natives ne la lisent pas : elles ont leurs propres vecteurs, faits avec une clé d'essai jetée.
 - **Arduino valide d'office toute nouvelle image** au démarrage, ce qui annulerait le retour arrière : `updater.cpp` surcharge `verifyRollbackLater()`, en `extern "C"`, et c'est `Updater::watchBoot` qui valide.
-- **Pas de `sodium_init()`** : vérifier et hacher n'en ont pas besoin, et l'appel ferait lier Argon2 et les tables de signature, 60 ko d'une partition d'application déjà remplie à 87 % (1 139 177 octets sur 1 310 720, le 11 novembre 2026). Tout ajout de bibliothèque se mesure contre cette marge : une image trop grande ne s'installe plus à distance.
+- **Pas de `sodium_init()`** : vérifier et hacher n'en ont pas besoin, et l'appel ferait lier Argon2 et les tables de signature, 60 ko d'une partition d'application déjà remplie à 87 % (1 139 953 octets sur 1 310 720, le 11 novembre 2026). Tout ajout de bibliothèque se mesure contre cette marge : une image trop grande ne s'installe plus à distance.
 - **Les suites natives lient la libsodium du poste** (`outils/libsodium_natif.py`, par pkg-config), installée par Homebrew ou apt et non épinglée, comme Graphviz pour les notices : elle ne sert qu'à vérifier les vecteurs, et sur la carte, c'est celle du SDK d'Arduino qui sert.
 - **Un firmware compilé hors d'un tag `phase-*`** (un clone sans tags, `git describe` réduit au hash) ne connaît pas sa version semver : il refuse toute mise à jour, `version inconnue`.
 - **OneWire 2.3.8 émet deux avertissements** `extra tokens at end of #undef` à la compilation ESP32 : ils viennent de la bibliothèque, pas du projet.
