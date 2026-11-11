@@ -33,8 +33,8 @@
 #include "substrate_sensor.h"
 #include "supervisor.h"
 #include "time_windows.h"
-#include "ventilation.h"
 #include "update_command.h"
+#include "ventilation.h"
 
 // Set by outils/version_firmware.py from `git describe`.
 #ifndef FIRMWARE_VERSION
