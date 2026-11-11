@@ -63,9 +63,10 @@ class Supervisor {
   size_t eventsPending() const;
 
   // Remote update (RG-mise-a-jour-a-distance), from the regulation loop:
-  // whether a fault forbids it, every cycle; the licence typed on the serial
-  // link; and the validation of a new firmware, every iteration.
-  void setUpdateFault(bool fault) { updater_.setFault(fault); }
+  // the faults under way, named in its warnings, every cycle; the licence
+  // typed on the serial link; and the validation of a new firmware, every
+  // iteration.
+  void setUpdateFaults(update::UpdateFaults faults) { updater_.setFaults(faults); }
   update::LicenceOutcome setUpdateLicence(const char* licence) {
     return updater_.setLicence(licence);
   }

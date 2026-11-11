@@ -48,7 +48,7 @@ pio run -e esp32dev -t upload
 pio device monitor                  # puis le bouton EN de la carte
 ```
 
-La carte du bureau refuse toute installation à distance, `defaut en cours` : sans SHT45 ni sonde du substrat, elle a une sonde d'air en défaut et une mesure du substrat rejetée (RG-mise-a-jour-refusee-pendant-un-defaut). Un nouveau firmware n'y retient pas non plus de mesure de l'air tant que le DHT11 reste extérieur, et le démarrage reviendrait à l'ancien au bout de 5 minutes.
+Sur la carte du bureau, une installation à distance passe, mais avec ses défauts nommés : sans SHT45 ni sonde du substrat, `acceptee` porte `"defauts":["defaut capteur","sonde sht45","substrat rejete"]` (RG-mise-a-jour-pendant-un-defaut). Un nouveau firmware n'y retient en revanche aucune mesure de l'air tant que le DHT11 reste extérieur, et le démarrage revient à l'ancien au bout de 5 minutes : `SONDE dht11 INTERIEURE` d'abord.
 
 Ouverte après le démarrage, la console ne montre que les lignes `MESURE` : les lignes qui disent pourquoi une sonde manque (`ABSENT capteur air`, `REJET mesure sht45 : <cause>`) sont déjà passées. Le bouton **EN** redémarre la carte sous les yeux de la console.
 

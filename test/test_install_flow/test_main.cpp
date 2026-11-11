@@ -9,7 +9,7 @@ using namespace terrarium::update;
 
 namespace {
 
-constexpr Situation kReady{false, false, true, true};
+constexpr Situation kReady{false, true, true};
 constexpr uint32_t kStallMs = 60UL * 1000UL;
 constexpr uint32_t kDeadlineMs = 5UL * 60UL * 1000UL;
 constexpr size_t kPartition = 0x140000;
@@ -24,7 +24,7 @@ SemVer version(const char* text) {
 // no evaluation order, and GCC copies `refusal` before calling admit…().
 template <typename Admit>
 void assertRefusal(Refusal expected, Admit admit) {
-  Refusal refusal = Refusal::kFault == expected ? Refusal::kBusy : Refusal::kFault;
+  Refusal refusal = Refusal::kQuota == expected ? Refusal::kBusy : Refusal::kQuota;
   TEST_ASSERT_FALSE(admit(refusal));
   TEST_ASSERT_EQUAL_STRING(describe(expected), describe(refusal));
 }
@@ -53,16 +53,13 @@ void setUp() {}
 void tearDown() {}
 
 void test_a_check_is_refused_only_while_busy_or_without_licence_or_version() {
-  Refusal refusal = Refusal::kFault;
+  Refusal refusal = Refusal::kQuota;
   TEST_ASSERT_TRUE(admitCheck(kReady, refusal));
-  // A fault does not prevent asking what Skaron offers.
-  TEST_ASSERT_TRUE(admitCheck({false, true, true, true}, refusal));
-  assertRefusal(Refusal::kBusy,
-                [](Refusal& out) { return admitCheck({true, false, true, true}, out); });
+  assertRefusal(Refusal::kBusy, [](Refusal& out) { return admitCheck({true, true, true}, out); });
   assertRefusal(Refusal::kNoLicence,
-                [](Refusal& out) { return admitCheck({false, false, false, true}, out); });
+                [](Refusal& out) { return admitCheck({false, false, true}, out); });
   assertRefusal(Refusal::kUnknownVersion,
-                [](Refusal& out) { return admitCheck({false, false, true, false}, out); });
+                [](Refusal& out) { return admitCheck({false, true, false}, out); });
 }
 
 // installer from 1.2.0 to 1.3.0 in `situation`.
@@ -70,18 +67,16 @@ bool installFrom120(const Situation& situation, Refusal& out) {
   return admitInstall(situation, version("1.2.0"), version("1.3.0"), out);
 }
 
-void test_an_installation_is_refused_during_a_fault() {
+void test_an_installation_is_refused_only_while_busy_or_without_licence_or_version() {
+  // A fault is not a reason: it is named in "acceptee" (RG-mise-a-jour-pendant-un-defaut).
   Refusal refusal = Refusal::kBusy;
   TEST_ASSERT_TRUE(installFrom120(kReady, refusal));
-  assertRefusal(Refusal::kFault,
-                [](Refusal& out) { return installFrom120({false, true, true, true}, out); });
-  // Busy first: the fault would only add to it.
   assertRefusal(Refusal::kBusy,
-                [](Refusal& out) { return installFrom120({true, true, true, true}, out); });
+                [](Refusal& out) { return installFrom120({true, true, true}, out); });
   assertRefusal(Refusal::kNoLicence,
-                [](Refusal& out) { return installFrom120({false, false, false, true}, out); });
+                [](Refusal& out) { return installFrom120({false, false, true}, out); });
   assertRefusal(Refusal::kUnknownVersion,
-                [](Refusal& out) { return installFrom120({false, false, true, false}, out); });
+                [](Refusal& out) { return installFrom120({false, true, false}, out); });
 }
 
 void test_an_installation_of_a_version_not_newer_is_not_offered() {
@@ -106,7 +101,7 @@ void test_skaron_is_asked_with_the_phase_and_version_in_place() {
 
 void test_skaron_s_status_gives_the_refusal() {
   Offer offer{};
-  Refusal refusal = Refusal::kFault;
+  Refusal refusal = Refusal::kQuota;
   TEST_ASSERT_EQUAL(static_cast<int>(Answer::kUpToDate),
                     static_cast<int>(answer(204, nullptr, offer, refusal)));
   const struct {
@@ -125,7 +120,7 @@ void test_skaron_s_status_gives_the_refusal() {
 
 void test_an_offer_is_read_without_its_notes() {
   Offer offer{};
-  Refusal refusal = Refusal::kFault;
+  Refusal refusal = Refusal::kQuota;
   const std::string json = offerJson(
       "1.3.0", "https://skaron-artifacts.s3.fr-par.scw.cloud/ssk-terrarium/1.3.0/a.bin?X=1",
       "dW50cnVzdGVk");
@@ -150,7 +145,7 @@ void test_a_malformed_offer_means_an_unreachable_service() {
   };
   for (const std::string& json : bad) {
     Offer offer{};
-    Refusal refusal = Refusal::kFault;
+    Refusal refusal = Refusal::kQuota;
     TEST_ASSERT_EQUAL_MESSAGE(static_cast<int>(Answer::kRefused),
                               static_cast<int>(answer(200, json.c_str(), offer, refusal)),
                               json.c_str());
@@ -192,7 +187,7 @@ void test_only_the_requested_release_of_this_phase_passes() {
 
 void test_an_image_that_cannot_fit_is_refused_before_writing() {
   DownloadProgress progress(kStallMs);
-  Failure failure = Failure::kFault;
+  Failure failure = Failure::kStalled;
   TEST_ASSERT_FALSE(progress.start(kPartition + 1, kPartition, 0, failure));
   TEST_ASSERT_EQUAL_STRING(describe(Failure::kTooLarge), describe(failure));
   TEST_ASSERT_FALSE(progress.start(-1, kPartition, 0, failure));
@@ -204,7 +199,7 @@ void test_an_image_that_cannot_fit_is_refused_before_writing() {
 
 void test_progress_is_reported_every_ten_percent() {
   DownloadProgress progress(kStallMs);
-  Failure failure = Failure::kFault;
+  Failure failure = Failure::kStalled;
   TEST_ASSERT_TRUE(progress.start(1000, kPartition, 0, failure));
   TEST_ASSERT_EQUAL_UINT8(0, progress.advance(99, 10));
   TEST_ASSERT_EQUAL_UINT8(10, progress.advance(1, 20));
@@ -220,7 +215,7 @@ void test_progress_is_reported_every_ten_percent() {
 
 void test_a_download_without_progress_for_60_s_is_stalled() {
   DownloadProgress progress(kStallMs);
-  Failure failure = Failure::kFault;
+  Failure failure = Failure::kStalled;
   TEST_ASSERT_TRUE(progress.start(1000, kPartition, 1000, failure));
   TEST_ASSERT_FALSE(progress.stalled(1000 + kStallMs - 1));
   TEST_ASSERT_TRUE(progress.stalled(1000 + kStallMs));
@@ -232,7 +227,7 @@ void test_a_download_without_progress_for_60_s_is_stalled() {
 
 void test_the_stall_survives_the_millis_wrap() {
   DownloadProgress progress(kStallMs);
-  Failure failure = Failure::kFault;
+  Failure failure = Failure::kStalled;
   TEST_ASSERT_TRUE(progress.start(1000, kPartition, 0xFFFFFF00u, failure));
   TEST_ASSERT_FALSE(progress.stalled(1000));
   TEST_ASSERT_TRUE(progress.stalled(kStallMs));
@@ -285,10 +280,23 @@ void test_the_validated_firmware_just_clears_its_note() {
                     static_cast<int>(readAttemptNote(nullptr, true, running, attempted)));
 }
 
+void test_a_fault_that_appears_during_a_download_is_warned_once() {
+  FaultWarnings warnings;
+  warnings.start(kDht11Fault);  // Already named in "acceptee".
+  TEST_ASSERT_EQUAL_UINT8(0, warnings.update(kDht11Fault));
+  // A new fault: the warning names every fault under way.
+  TEST_ASSERT_EQUAL_UINT8(kDht11Fault | kHeatPaused, warnings.update(kDht11Fault | kHeatPaused));
+  TEST_ASSERT_EQUAL_UINT8(0, warnings.update(kDht11Fault | kHeatPaused));
+  // One that ends and comes back is not new.
+  TEST_ASSERT_EQUAL_UINT8(0, warnings.update(kDht11Fault));
+  TEST_ASSERT_EQUAL_UINT8(0, warnings.update(kDht11Fault | kHeatPaused));
+  TEST_ASSERT_EQUAL_UINT8(kAirFault, warnings.update(kAirFault));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_a_check_is_refused_only_while_busy_or_without_licence_or_version);
-  RUN_TEST(test_an_installation_is_refused_during_a_fault);
+  RUN_TEST(test_an_installation_is_refused_only_while_busy_or_without_licence_or_version);
   RUN_TEST(test_an_installation_of_a_version_not_newer_is_not_offered);
   RUN_TEST(test_skaron_is_asked_with_the_phase_and_version_in_place);
   RUN_TEST(test_skaron_s_status_gives_the_refusal);
@@ -302,6 +310,7 @@ int main() {
   RUN_TEST(test_the_stall_survives_the_millis_wrap);
   RUN_TEST(test_a_new_firmware_is_valid_once_it_regulates_and_joins_the_broker);
   RUN_TEST(test_a_new_firmware_that_does_not_make_it_in_5_minutes_is_turned_down);
+  RUN_TEST(test_a_fault_that_appears_during_a_download_is_warned_once);
   RUN_TEST(test_a_restored_firmware_reports_the_version_turned_down);
   RUN_TEST(test_the_validated_firmware_just_clears_its_note);
   return UNITY_END();

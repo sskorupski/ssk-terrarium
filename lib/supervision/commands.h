@@ -16,7 +16,8 @@
 
 namespace terrarium::supervision {
 
-constexpr size_t kEventSize = 192;
+// The longest: "avertissement" of a remote update naming every fault.
+constexpr size_t kEventSize = 256;
 
 // cmd/mode: the bare wire name, exactly. Returns false and leaves `out`
 // untouched on anything else.

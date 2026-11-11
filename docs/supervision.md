@@ -101,7 +101,8 @@ Une installation acceptée se suit sur `event`, au format `{"evenement":"mise-a-
 | `disponible` | réponse à `verifier` | `version` proposée par Skaron |
 | `a-jour` | réponse à `verifier` | `version` en place |
 | `refusee` | commande refusée | `raison` |
-| `acceptee` | Skaron propose la version demandée | `version` |
+| `acceptee` | Skaron propose la version demandée | `version`, et `defauts` si un défaut est en cours |
+| `avertissement` | un défaut apparaît pendant le téléchargement | `version`, `defauts` |
 | `telechargement` | tous les 10 % | `version`, `progression` (10 à 100) |
 | `echec` | installation abandonnée, le firmware en place continue | `version`, `raison` |
 | `redemarrage` | image vérifiée, juste avant de redémarrer | `version` |
@@ -110,13 +111,14 @@ Une installation acceptée se suit sur `event`, au format `{"evenement":"mise-a-
 
 `refusee` donne l'une de ces raisons, et rien ne se télécharge :
 
-- `defaut en cours` : défaut capteur, sonde d'air en défaut, mesure du substrat rejetée, coupure par le substrat ou pause de chauffe. On règle le défaut d'abord. `verifier` reste permis. Le mode `MAINTENANCE`, lui, n'empêche rien.
 - `mise a jour en cours` : une vérification ou une installation tourne déjà, ou le firmware qui vient d'être installé ne s'est pas encore déclaré valide.
 - `sans licence`, `licence refusee` (Skaron répond 401 ou 403 : licence révoquée ou expirée), `quota depasse` (429 : dix adresses d'image par heure), `service injoignable` (pas de réseau, Skaron en panne, ou réponse illisible).
 - `version non proposee` : Skaron propose une autre version, ou aucune. Relancer `verifier`.
 - `version inconnue` : le firmware n'a pas été compilé depuis un tag `phase-*`, et ne sait pas se situer.
 
-`echec` donne l'une de ces raisons : `defaut en cours` (un défaut est apparu pendant le téléchargement), `telechargement interrompu` (aucun octet reçu pendant 60 s, connexion perdue, ou adresse refusée), `signature invalide`, `image invalide`, `image trop grande`, `version non plus recente` ou `phase differente`. Une commande illisible reçoit la réponse commune : `{"evenement":"commande","sujet":"cmd/mise-a-jour","resultat":"refusee","raison":"JSON invalide"}`, ou `champ inconnu`, `action inconnue (verifier, installer)`, `version invalide (x.y.z)`.
+`echec` donne l'une de ces raisons : `telechargement interrompu` (aucun octet reçu pendant 60 s, connexion perdue, ou adresse refusée), `signature invalide`, `image invalide`, `image trop grande`, `version non plus recente` ou `phase differente`. Une commande illisible reçoit la réponse commune : `{"evenement":"commande","sujet":"cmd/mise-a-jour","resultat":"refusee","raison":"JSON invalide"}`, ou `champ inconnu`, `action inconnue (verifier, installer)`, `version invalide (x.y.z)`.
+
+**Un défaut n'empêche ni n'interrompt une installation : il est nommé** (RG-mise-a-jour-pendant-un-defaut, décision du propriétaire du 11 novembre 2026). `acceptee` porte alors `defauts`, la liste des défauts en cours, et chaque défaut qui apparaît pendant le téléchargement publie `avertissement` avec la liste complète : `{"evenement":"mise-a-jour","etape":"acceptee","version":"1.3.0","defauts":["sonde dht11","substrat rejete"]}`. Les noms : `defaut capteur` (l'air intérieur), `sonde sht45`, `sonde dht11`, `substrat rejete`, `coupure substrat`, `pause chauffe`. Une installation pendant un défaut ajoute à une situation dégradée un redémarrage, sorties coupées, et efface les délais de détection en cours, qui repartent de zéro. Et un nouveau firmware qui ne retient aucune mesure de l'air dans les 5 minutes est défait : installé pendant un défaut de l'air intérieur, il risque de l'être.
 
 Comme toute commande, une commande reçue dans les 3 secondes qui suivent l'abonnement est ignorée : **ne jamais publier `cmd/mise-a-jour` en retenu**.
 

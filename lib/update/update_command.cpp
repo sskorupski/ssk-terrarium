@@ -32,8 +32,6 @@ const char* stepName(VersionStep step) {
       return "disponible";
     case VersionStep::kUpToDate:
       return "a-jour";
-    case VersionStep::kAccepted:
-      return "acceptee";
     case VersionStep::kRestart:
       return "redemarrage";
     case VersionStep::kValidated:
@@ -42,6 +40,39 @@ const char* stepName(VersionStep step) {
       return "annulee";
   }
   return "inconnue";
+}
+
+constexpr struct {
+  UpdateFaults fault;
+  const char* name;
+} kFaultNames[] = {{kAirFault, "defaut capteur"},       {kSht45Fault, "sonde sht45"},
+                   {kDht11Fault, "sonde dht11"},        {kSubstrateRejected, "substrat rejete"},
+                   {kSubstrateCut, "coupure substrat"}, {kHeatPaused, "pause chauffe"}};
+
+// {"evenement":"mise-a-jour","etape":"<step>","version":"…"[,"defauts":[…]]}
+bool formatFaultsEvent(const char* step, const SemVer& version, UpdateFaults faults,
+                       char (&out)[supervision::kEventSize]) {
+  char text[kVersionTextSize];
+  if (!format(version, text)) return false;
+  int written = std::snprintf(out, sizeof(out),
+                              "{\"evenement\":\"mise-a-jour\",\"etape\":\"%s\",\"version\":\"%s\"",
+                              step, text);
+  if (!fits(written, sizeof(out))) return false;
+  size_t used = static_cast<size_t>(written);
+  if (faults != 0) {
+    const char* separator = ",\"defauts\":[";
+    for (const auto& f : kFaultNames) {
+      if ((faults & f.fault) == 0) continue;
+      written = std::snprintf(out + used, sizeof(out) - used, "%s\"%s\"", separator, f.name);
+      if (!fits(written, sizeof(out) - used)) return false;
+      used += static_cast<size_t>(written);
+      separator = ",";
+    }
+    written = std::snprintf(out + used, sizeof(out) - used, "]");
+    if (!fits(written, sizeof(out) - used)) return false;
+    used += static_cast<size_t>(written);
+  }
+  return fits(std::snprintf(out + used, sizeof(out) - used, "}"), sizeof(out) - used);
 }
 
 }  // namespace
@@ -136,8 +167,6 @@ LicenceLine parseLicenceLine(const char* line, char (&out)[kLicenceSize]) {
 
 const char* describe(Refusal refusal) {
   switch (refusal) {
-    case Refusal::kFault:
-      return "defaut en cours";
     case Refusal::kBusy:
       return "mise a jour en cours";
     case Refusal::kNoLicence:
@@ -158,8 +187,6 @@ const char* describe(Refusal refusal) {
 
 const char* describe(Failure failure) {
   switch (failure) {
-    case Failure::kFault:
-      return "defaut en cours";
     case Failure::kStalled:
       return "telechargement interrompu";
     case Failure::kBadSignature:
@@ -203,6 +230,24 @@ bool formatVersionEvent(VersionStep step, const SemVer& version,
                             "{\"evenement\":\"mise-a-jour\",\"etape\":\"%s\",\"version\":\"%s\"}",
                             stepName(step), text),
               sizeof(out));
+}
+
+const char* faultName(UpdateFaults fault) {
+  for (const auto& f : kFaultNames) {
+    if (f.fault == fault) return f.name;
+  }
+  return nullptr;
+}
+
+bool formatAcceptedEvent(const SemVer& version, UpdateFaults faults,
+                         char (&out)[supervision::kEventSize]) {
+  return formatFaultsEvent("acceptee", version, faults & kAllUpdateFaults, out);
+}
+
+bool formatWarningEvent(const SemVer& version, UpdateFaults faults,
+                        char (&out)[supervision::kEventSize]) {
+  faults &= kAllUpdateFaults;
+  return faults != 0 && formatFaultsEvent("avertissement", version, faults, out);
 }
 
 bool formatProgressEvent(const SemVer& version, uint8_t percent,
