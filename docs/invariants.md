@@ -4,7 +4,7 @@ Ces règles ne se négocient pas. Chacune se cite par son numéro, en revue, en 
 
 ## INV-1 — Toutes les sorties sont coupées au démarrage
 
-Chauffage, éclairage, pompe et ventilateur passent à l'état coupé avant toute autre opération de `setup()` (RG-sorties-coupees-au-demarrage), et une broche non pilotée laisse chaque relais ouvert (RG-relais-coupes-sans-commande).
+Chauffage, éclairage, pompe et ventilateur passent à l'état coupé avant toute autre opération de `setup()` (RG-sorties-coupees-au-demarrage), et une broche non pilotée laisse chaque relais ouvert (RG-relais-coupes-sans-commande). Cela vaut aussi au redémarrage qui suit une mise à jour à distance, et à celui qui revient à l'ancien firmware (INV-8).
 
 - **Ce qu'il protège** : un redémarrage, un plantage ou une initialisation bloquée n'allume rien.
 - **Sans lui** : un reset pendant que le chauffage chauffe le laisserait allumé, sans régulation, indéfiniment.
@@ -22,7 +22,7 @@ La mise en sécurité est active par défaut. Seul le propriétaire la désactiv
 
 ## INV-3 — La régulation ne dépend jamais du réseau
 
-Mesure, décision et pilotage des sorties tournent sur l'ESP32 seul. Le portail, MQTT et les alertes supervisent, depuis leur propre tâche ; rien de la boucle de régulation n'attend une réponse du réseau (RG-regulation-sans-reseau). Une commande reçue du réseau entre dans une file que la boucle lit sans attendre. Le mode `PLAGES` lit l'heure que le NTP a donnée, sans jamais l'attendre : tant qu'elle n'est pas connue, il chauffe sur la consigne comme `ACTIF`, si bien que l'absence de réseau ne peut ni couper le chauffage ni l'abaisser au plancher de 12 °C (RG-chauffage-par-plages).
+Mesure, décision et pilotage des sorties tournent sur l'ESP32 seul. Le portail, MQTT et les alertes supervisent, depuis leur propre tâche ; rien de la boucle de régulation n'attend une réponse du réseau (RG-regulation-sans-reseau). Une commande reçue du réseau entre dans une file que la boucle lit sans attendre. Le téléchargement d'une mise à jour tourne dans sa propre tâche, sur le cœur 0 : pendant ce temps, la boucle mesure, régule et nourrit le chien de garde comme d'habitude (RG-regulation-pendant-la-mise-a-jour). Le mode `PLAGES` lit l'heure que le NTP a donnée, sans jamais l'attendre : tant qu'elle n'est pas connue, il chauffe sur la consigne comme `ACTIF`, si bien que l'absence de réseau ne peut ni couper le chauffage ni l'abaisser au plancher de 12 °C (RG-chauffage-par-plages).
 
 - **Ce qu'il protège** : une box qui redémarre ou un Wi-Fi absent ne changent rien au climat du terrarium.
 - **Sans lui** : un appel réseau bloquant suffit à figer la boucle, et le chien de garde à redémarrer la carte en boucle.
@@ -56,6 +56,13 @@ Plateforme, bibliothèques et outils de CI sont fixés à une version exacte dan
 
 - **Ce qu'il protège** : une compilation ne change pas parce qu'un registre a publié quelque chose.
 - **Sans lui** : le même commit pourrait produire deux firmwares différents, dont un jamais testé.
+
+## INV-8 — Seule une image signée par le propriétaire s'installe à distance
+
+Une mise à jour à distance n'installe qu'une image signée par la clé minisign du propriétaire, dont la clé publique est compilée dans le firmware (`outils/mise-a-jour.pub`). La signature couvre l'image et un commentaire de confiance qui nomme le produit, la phase et la version : une image d'une autre phase, ou qui n'est pas plus récente que celle en place, est refusée (RG-image-signee). La partition n'est rendue démarrable qu'après cette vérification. La clé secrète ne quitte pas le poste du propriétaire : ni la CI ni Skaron ne la détiennent. Aucune installation pendant un défaut (RG-mise-a-jour-refusee-pendant-un-defaut), et un nouveau firmware qui n'a pas, dans les 5 minutes, retenu une mesure de l'air et rejoint le courtier laisse le démarrage revenir à l'ancien (RG-retour-arriere-automatique). Cadrage [ssk-terrarium-cadrage#2026-010](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-010).
+
+- **Ce qu'il protège** : les bornes, les coupures et le chien de garde ne peuvent être retirés par aucun compte MQTT, aucune fuite de licence, aucune compromission de Skaron, de son bucket ou de la CI. C'est ce qui garde INV-5 vraie à l'heure de la mise à jour.
+- **Sans lui** : le compte qui publie sur `cmd/#` pourrait installer un firmware sans bornes, ou un firmware qui ne régule plus et ne se corrigerait qu'en ouvrant le boîtier.
 
 ## Changer un invariant
 

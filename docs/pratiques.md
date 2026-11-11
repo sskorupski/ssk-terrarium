@@ -54,9 +54,20 @@ Chaque phase se livre de sorte qu'une autre personne puisse refaire le montage s
 2. **Chaque branchement a son schéma WireViz** : `docs/notice/phase-N/<sujet>.yml`, et `outils/schemas.sh` en produit le `.gv` et le `.svg`, commités tous les trois. La CI régénère les `.gv` et refuse une demande de fusion dont le schéma ne suit plus sa source.
 3. **La phase se valide en suivant sa propre notice**, sur le vrai montage, de la première étape à la dernière ; ce qui a été mesuré (niveau de déclenchement, tensions) se reporte dans le cadrage.
 4. **Le tag `phase-N` se pose sur `main`** une fois la notice validée. Un correctif qui ne change pas le montage prend `phase-N.1`, `phase-N.2`… ; un changement de montage attend la phase suivante.
-5. **Le workflow de publication** réagit au tag : il refait les contrôles, construit l'image fusionnée du firmware et le PDF de la notice, et crée la version GitHub avec ces deux fichiers.
+5. **Le workflow de publication** réagit au tag : il refait les contrôles, construit l'image fusionnée du firmware et le PDF de la notice, et crée la version GitHub avec ces fichiers, plus `firmware-<tag>.bin`, l'application seule, et son empreinte SHA-256, pour la mise à jour à distance.
 
 Le tag est le seul repère d'une personne qui reprend le projet : la notice qu'elle lit et le firmware qu'elle téléverse viennent du même commit.
+
+### Publier une mise à jour
+
+Un correctif `phase-N.M`, qui ne change pas le montage, s'installe aussi à distance (cadrage [ssk-terrarium-cadrage#2026-010](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-010)). Un changement de phase change le câblage : il ne s'installe qu'au câble, notice à la main, et le firmware refuse une image d'une autre phase.
+
+1. **Une fois : la paire de signature**, sur le poste du propriétaire. `outils/cle-mise-a-jour.sh` génère la paire minisign, demande la phrase de passe, range la clé secrète chiffrée dans le trousseau macOS et écrit `outils/mise-a-jour.pub`, qui se commite : le firmware la compile. La clé secrète ne quitte pas ce poste, ni vers la CI, ni vers Skaron (INV-8). Une copie s'en garde hors de la machine : perdue, plus aucune carte en service n'accepte d'image, et toutes se reprennent au câble. Changer de clé exige un firmware qui connaisse la nouvelle, installé avec l'ancienne.
+2. **Une fois par régulateur : sa licence Skaron**, par `outils/licence-mise-a-jour.sh <id>` ([supervision.md](supervision.md#une-fois-par-régulateur--sa-licence)).
+3. **À chaque version**, une fois la release `phase-N.M` publiée par la CI : `outils/publier-mise-a-jour.sh phase-N.M`. Le script télécharge `firmware-phase-N.M.bin`, en vérifie l'empreinte et la ligne de démarrage, le signe avec la clé du trousseau et le commentaire de confiance `ssk-terrarium esp32-phase-N N.M.0`, vérifie la signature, puis, après confirmation, le publie par `skaron release publish`, produit `ssk-terrarium`, cible `esp32-phase-N`, canal `stable`. Il lui faut les variables `SKARON_S3_*` du CLI de Skaron.
+4. **L'installation reste un geste par régulateur**, sur commande : `verifier`, puis `installer` ([supervision.md](supervision.md#vérifier-puis-installer)). Rien ne s'installe de soi-même.
+
+Le manifeste de Skaron ne garde qu'une version par canal : la première publication d'une phase N+1 retirera la cible `esp32-phase-N`, et les régulateurs de la phase N ne se verront plus rien proposer. C'est une question ouverte du cadrage, à régler le jour d'une phase 2.
 
 ### Rédiger une notice
 

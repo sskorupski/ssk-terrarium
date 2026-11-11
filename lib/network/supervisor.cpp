@@ -5,6 +5,8 @@
 #include <esp_mac.h>
 #include <esp_sntp.h>
 
+#include <cstring>
+
 #include "wifi_failure.h"
 
 namespace terrarium::network {
@@ -39,9 +41,10 @@ struct EventItem {
 
 }  // namespace
 
-void Supervisor::begin() {
+void Supervisor::begin(const char* firmwareVersion, const char* updateKey) {
   commands_ = xQueueCreate(kCommandQueueLength, sizeof(RemoteCommand));
   events_ = xQueueCreate(kEventQueueLength, sizeof(EventItem));
+  updater_.begin(firmwareVersion, updateKey);
   mqtt_.onCommand([this](mqtt::CommandTopic topic, const uint8_t* payload, size_t length) {
     handleCommand(topic, payload, length);
   });
@@ -99,7 +102,39 @@ void Supervisor::sendEvent(const char (&event)[supervision::kEventSize]) {
   xQueueSend(events_, &item, 0);
 }
 
+size_t Supervisor::eventsPending() const {
+  return events_ == nullptr ? 0 : uxQueueMessagesWaiting(events_);
+}
+
+void Supervisor::handleUpdateCommand(const uint8_t* payload, size_t length) {
+  // Static: only this task parses commands, and the licence weighs 800 bytes.
+  static update::UpdateCommand command;
+  const update::UpdateCommandError error = update::parseUpdatePayload(payload, length, command);
+  if (error == update::UpdateCommandError::kBadLicence) {
+    char event[supervision::kEventSize];
+    if (update::formatLicenceEvent(update::LicenceOutcome::kRefused, event)) {
+      mqtt_.publishEvent(event);
+    }
+    Serial.println("MQTT commande cmd/mise-a-jour refusee : licence vide, trop longue ou invalide");
+    return;
+  }
+  if (error != update::UpdateCommandError::kNone) {
+    rejectCommand("cmd/mise-a-jour", update::describe(error));
+    return;
+  }
+  if (command.action == update::UpdateAction::kLicence) {
+    updater_.setLicence(command.licence);
+    std::memset(command.licence, 0, sizeof(command.licence));
+    return;
+  }
+  updater_.handle(command);
+}
+
 void Supervisor::handleCommand(mqtt::CommandTopic topic, const uint8_t* payload, size_t length) {
+  if (topic == mqtt::CommandTopic::kUpdate) {
+    handleUpdateCommand(payload, length);
+    return;
+  }
   RemoteCommand command{};
   if (topic == mqtt::CommandTopic::kMode) {
     if (!supervision::parseModePayload(payload, length, command.mode)) {
@@ -121,8 +156,7 @@ void Supervisor::handleCommand(mqtt::CommandTopic topic, const uint8_t* payload,
     command.kind = RemoteCommand::Kind::kConfig;
   }
   if (xQueueSend(commands_, &command, 0) != pdTRUE) {
-    rejectCommand(topic == mqtt::CommandTopic::kMode ? "cmd/mode" : "cmd/config",
-                  "trop de commandes en attente");
+    rejectCommand(mqtt::commandSubtopic(topic), "trop de commandes en attente");
   }
 }
 
@@ -153,6 +187,7 @@ void Supervisor::step(uint32_t nowMs) {
   if (hasSettings_ && !connected && nowMs - lastJoinMs_ >= kRejoinMs) joinWifi(nowMs);
 
   mqtt_.loop(nowMs, connected);
+  brokerConnected_ = mqtt_.connected();
   publishPending();
 }
 

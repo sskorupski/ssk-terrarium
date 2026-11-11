@@ -24,7 +24,7 @@ Sur la liaison série (115 200 bauds), `MODE ACTIF`, `MODE PLAGES`, `MODE HIBERN
 
 ## Monter le régulateur
 
-Chaque phase a sa notice pas à pas, avec ses schémas de branchement, et une version taguée `phase-N` dont la page de [Releases](https://github.com/sskorupski/ssk-terrarium/releases) porte le firmware prêt à téléverser et la notice en PDF : voir [docs/notice/README.md](docs/notice/README.md).
+Chaque phase a sa notice pas à pas, avec ses schémas de branchement, et une version taguée `phase-N` dont la page de [Releases](https://github.com/sskorupski/ssk-terrarium/releases) porte le firmware prêt à téléverser, l'image de mise à jour à distance et la notice en PDF : voir [docs/notice/README.md](docs/notice/README.md).
 
 ## Documentation
 

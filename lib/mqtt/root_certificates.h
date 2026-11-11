@@ -13,7 +13,7 @@
 
 namespace terrarium::mqtt {
 
-constexpr char kBrokerRootCertificates[] = R"PEM(
+inline constexpr char kBrokerRootCertificates[] = R"PEM(
 -----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
 TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh

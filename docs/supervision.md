@@ -1,6 +1,6 @@
 # Supervision à distance
 
-Le régulateur rejoint le Wi-Fi du domicile, publie son état sur le courtier MQTT `mq.ssk-it.fr`, et accepte deux commandes : changer de mode, changer les réglages du chauffage (consigne, plages horaires et fuseau du mode `PLAGES`). Rien de tout cela n'entre dans la régulation : sans Wi-Fi ni courtier, le chauffage continue exactement de la même façon (INV-3). Seule exception, le Wi-Fi donne l'heure au mode `PLAGES` ; sans elle, ce mode chauffe sur la consigne ([mode-plages.md](mode-plages.md)). Le pourquoi est dans le cadrage [ssk-terrarium-cadrage#2026-002](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-002).
+Le régulateur rejoint le Wi-Fi du domicile, publie son état sur le courtier MQTT `mq.ssk-it.fr`, et accepte trois commandes : changer de mode, changer les réglages du chauffage (consigne, plages horaires et fuseau du mode `PLAGES`), et mettre à jour son firmware ([plus bas](#mettre-à-jour-le-firmware-à-distance)). Rien de tout cela n'entre dans la régulation : sans Wi-Fi ni courtier, le chauffage continue exactement de la même façon (INV-3). Seule exception, le Wi-Fi donne l'heure au mode `PLAGES` ; sans elle, ce mode chauffe sur la consigne ([mode-plages.md](mode-plages.md)). Le pourquoi est dans le cadrage [ssk-terrarium-cadrage#2026-002](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-002).
 
 ## Configurer le Wi-Fi
 
@@ -25,7 +25,7 @@ Le réseau de configuration se rouvre :
 
 La page ne répond que sur ce réseau, jamais sur celui du domicile, et ne commande aucune sortie. Les mots de passe ne sont jamais réaffichés : on les ressaisit à chaque enregistrement.
 
-**L'image fusionnée efface la mémoire** (`outils/firmware-fusionne.sh`, adresse `0x0`) : après l'avoir téléversée, la carte repart en `MAINTENANCE`, sans Wi-Fi, avec un nouveau mot de passe de configuration. On reprend à l'étape 1.
+**L'image fusionnée efface la mémoire** (`outils/firmware-fusionne.sh`, adresse `0x0`) : après l'avoir téléversée, la carte repart en `MAINTENANCE`, sans Wi-Fi, avec un nouveau mot de passe de configuration. On reprend à l'étape 1. Une mise à jour à distance, elle, garde tous les réglages ([plus bas](#mettre-à-jour-le-firmware-à-distance)).
 
 ## Lire l'état
 
@@ -40,7 +40,7 @@ Sous macOS, remplacer `--capath /etc/ssl/certs` par `--cafile` et le fichier `mo
 | Sujet | Contenu |
 | --- | --- |
 | `ssk-terrarium/<id>/state` | toutes les 30 s, retenu : mesure de l'air retenue pour réguler (`air`) et la sonde qui la donne (`sonde_retenue`), chaque sonde d'air (`sondes`), mesure du substrat (`null` si invalides ou rejetées), sorties, mode, consigne, hystérésis, défaut capteur, cause du rejet de la mesure de l'air (`cause_mesure_air`), mise en sécurité de l'air intérieur (`mise_en_securite`), combinaison des sondes (`combinaison`), pause de chauffe, coupure par le substrat (`coupure_substrat`, RG-coupure-par-le-substrat), secondes depuis le démarrage, version, plages, fuseau, `heure_connue`, `en_plage` (`null` sans heure), réglage de la ventilation (`ventilation`), et `bornes` des réglages (ci-dessous) |
-| `ssk-terrarium/<id>/event` | réponse à chaque commande, chaque changement de mode, série compris, et chaque chauffe de la SHT45 |
+| `ssk-terrarium/<id>/event` | réponse à chaque commande, chaque changement de mode, série compris, chaque chauffe de la SHT45, et chaque étape d'une mise à jour |
 | `ssk-terrarium/<id>/status` | `en-ligne`, ou `hors-ligne` si la connexion tombe |
 
 ## Commander
@@ -62,3 +62,66 @@ mosquitto_pub -h mq.ssk-it.fr -p 443 --capath /etc/ssl/certs -u proprietaire -P 
 - **Ne jamais publier une commande en « retenu »** (`-r`). Une commande que le courtier garde serait rejouée à chaque reconnexion : la carte ignore toute commande reçue dans les 3 secondes qui suivent son abonnement, ce qui écarte les commandes retenues, et le dit sur `event`.
 
 Le hors-gel de `HIBERNATION`, le plancher de 12-14 °C hors plage de `PLAGES`, la durée maximale de chauffe, et le chien de garde ne sont pas des réglages : aucune commande ne les touche. La coupure sur capteur en défaut ne se lève que par `mise_en_securite`, décision du propriétaire.
+
+## Mettre à jour le firmware à distance
+
+Une nouvelle version s'installe sans câble ni passage au garage, et seulement sur commande : rien ne s'installe de soi-même, rien ne se relance après un échec. Le pourquoi est dans le cadrage [ssk-terrarium-cadrage#2026-010](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-010).
+
+- **L'image vient de Skaron** (`api.skaron.ssk-it.fr`), l'hôte fixé à la compilation, en HTTPS vérifié contre les racines déjà embarquées. Une commande ne porte qu'un numéro de version : jamais une adresse ni une image.
+- **Seule une image signée par le propriétaire s'installe** (INV-8). La carte vérifie la signature minisign avec la clé publique compilée, `outils/mise-a-jour.pub`, et le commentaire de confiance signé avec elle, `ssk-terrarium esp32-phase-<N> <version>` : une image d'une autre phase, ou plus ancienne que celle en place, est refusée. La partition n'est rendue démarrable qu'après.
+- **La régulation continue pendant le téléchargement**, qui tourne dans sa propre tâche. La seule interruption est le redémarrage, sorties coupées, quelques secondes. Les réglages, le Wi-Fi et le courtier sont conservés.
+- **Un nouveau firmware qui ne marche pas se défait seul** : voir « Retour arrière », plus bas.
+
+Publier une version dans Skaron se fait sur le poste du propriétaire : [pratiques.md](pratiques.md#publier-une-mise-à-jour).
+
+### Une fois par régulateur : sa licence
+
+Skaron ne répond qu'à un régulateur muni de sa licence. Depuis le poste du propriétaire, avec l'identifiant de la carte :
+
+```bash
+outils/licence-mise-a-jour.sh 246f28a1b2c3
+```
+
+Le script émet la licence par le CLI de Skaron, la publie sur `cmd/mise-a-jour` sans jamais l'afficher, et attend la réponse : `{"evenement":"mise-a-jour","etape":"licence","resultat":"applique"}`. Elle est enregistrée en mémoire non volatile, et ne se publie ni ne s'écrit jamais sur la liaison série. Faute de réseau, elle se tape aussi sur la liaison série : `licence <jeton>`, réponse `MISE-A-JOUR licence enregistree, conservee apres coupure`. Un jeton vide, de plus de 768 caractères ou avec autre chose que des lettres, des chiffres, `-`, `_` et `.` est refusé : `"resultat":"refuse"`.
+
+### Vérifier, puis installer
+
+```bash
+mosquitto_pub -h mq.ssk-it.fr -p 443 --capath /etc/ssl/certs -u proprietaire -P '<mot de passe>' -t 'ssk-terrarium/<id>/cmd/mise-a-jour' -m '{"action":"verifier"}'
+mosquitto_pub -h mq.ssk-it.fr -p 443 --capath /etc/ssl/certs -u proprietaire -P '<mot de passe>' -t 'ssk-terrarium/<id>/cmd/mise-a-jour' -m '{"action":"installer","version":"1.3.0"}'
+```
+
+`verifier` demande à Skaron la version proposée : `"etape":"disponible","version":"1.3.0"`, ou `"etape":"a-jour"` avec la version en place. `installer` n'installe que la version que Skaron propose encore au moment de la commande : on installe exactement ce qu'on a vu. La version se lit au sens semver : le tag `phase-1.3` donne `1.3.0`, et une compilation entre deux tags porte en plus le nombre de commits et le hash (`1.2.0+3.g1a2b3c4`), sans dépasser son tag. `state` publie toujours `version` telle que `git describe` la donne.
+
+Une installation acceptée se suit sur `event`, au format `{"evenement":"mise-a-jour","etape":…}` :
+
+| `etape` | Quand | Champs |
+| --- | --- | --- |
+| `licence` | licence reçue | `resultat` : `applique`, `applique_non_enregistre` ou `refuse` |
+| `disponible` | réponse à `verifier` | `version` proposée par Skaron |
+| `a-jour` | réponse à `verifier` | `version` en place |
+| `refusee` | commande refusée | `raison` |
+| `acceptee` | Skaron propose la version demandée | `version` |
+| `telechargement` | tous les 10 % | `version`, `progression` (10 à 100) |
+| `echec` | installation abandonnée, le firmware en place continue | `version`, `raison` |
+| `redemarrage` | image vérifiée, juste avant de redémarrer | `version` |
+| `validee` | nouveau firmware déclaré valide | `version` |
+| `annulee` | ancien firmware restauré par le démarrage | `version` refusée |
+
+`refusee` donne l'une de ces raisons, et rien ne se télécharge :
+
+- `defaut en cours` : défaut capteur, sonde d'air en défaut, mesure du substrat rejetée, coupure par le substrat ou pause de chauffe. On règle le défaut d'abord. `verifier` reste permis. Le mode `MAINTENANCE`, lui, n'empêche rien.
+- `mise a jour en cours` : une vérification ou une installation tourne déjà, ou le firmware qui vient d'être installé ne s'est pas encore déclaré valide.
+- `sans licence`, `licence refusee` (Skaron répond 401 ou 403 : licence révoquée ou expirée), `quota depasse` (429 : dix adresses d'image par heure), `service injoignable` (pas de réseau, Skaron en panne, ou réponse illisible).
+- `version non proposee` : Skaron propose une autre version, ou aucune. Relancer `verifier`.
+- `version inconnue` : le firmware n'a pas été compilé depuis un tag `phase-*`, et ne sait pas se situer.
+
+`echec` donne l'une de ces raisons : `defaut en cours` (un défaut est apparu pendant le téléchargement), `telechargement interrompu` (aucun octet reçu pendant 60 s, connexion perdue, ou adresse refusée), `signature invalide`, `image invalide`, `image trop grande`, `version non plus recente` ou `phase differente`. Une commande illisible reçoit la réponse commune : `{"evenement":"commande","sujet":"cmd/mise-a-jour","resultat":"refusee","raison":"JSON invalide"}`, ou `champ inconnu`, `action inconnue (verifier, installer)`, `version invalide (x.y.z)`.
+
+Comme toute commande, une commande reçue dans les 3 secondes qui suivent l'abonnement est ignorée : **ne jamais publier `cmd/mise-a-jour` en retenu**.
+
+### Retour arrière
+
+Le nouveau firmware démarre « à vérifier ». Il se déclare valide, et publie `validee`, dès qu'il a retenu une mesure de l'air **et** rejoint le courtier. S'il n'y parvient pas dans les 5 minutes, s'il plante, ou si le chien de garde le redémarre avant, le démarrage revient à l'ancien firmware. Celui-ci publie `annulee` avec la version refusée dès qu'il rejoint le courtier, et ne retente rien.
+
+Sur la liaison série, les lignes de la mise à jour commencent par `MISE-A-JOUR` : `licence enregistree`, `aucune licence enregistree : mise a jour a distance impossible`, `refusee : <raison>`, `<version> acceptee : telechargement dans la partition inactive`, `telechargement 40 % : tas libre … octets, minimum …`, `<version> abandonnee : <raison>, le firmware en place continue`, `<version> verifiee : redemarrage, sorties coupees le temps du demarrage`, puis au démarrage du nouveau firmware `firmware <version> a verifier : …`, `firmware <version> valide : retour arriere annule`, ou `firmware <version> non valide apres 5 minutes : retour a l'ancien`. L'ancien firmware restauré écrit `<version> refusee par le demarrage : retour au firmware <version>`.

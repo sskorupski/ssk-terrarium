@@ -270,6 +270,8 @@ La phase est terminée quand les dix étapes donnent ce qu'elles annoncent. Repo
 
 L'hiver, laisser le régulateur en `ACTIF` pour l'élevage, ou en `HIBERNATION` pour la mise au repos : le mode survit aux coupures de courant. Une fois le Wi-Fi configuré ([supervision.md](../../supervision.md)), le mode `PLAGES` chauffe sur la consigne aux heures choisies et tient 12 °C le reste du temps ([mode-plages.md](../../mode-plages.md)).
 
+Les correctifs de la phase 1 (`phase-1.1`, `phase-1.2`…) s'installent ensuite à distance, sans rouvrir le boîtier ni reconfigurer le Wi-Fi : le régulateur reçoit une fois sa licence, puis chaque version sur commande ([supervision.md](../../supervision.md#mettre-à-jour-le-firmware-à-distance)). Le câble USB et l'image fusionnée ne servent plus qu'à la première installation et au passage à une autre phase : cette image-là efface les réglages.
+
 ## Crédits des illustrations
 
 Illustrations de la liste du matériel, reprises sous licence libre et réduites :

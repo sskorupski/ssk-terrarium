@@ -17,6 +17,8 @@
 #include "network_settings.h"
 #include "settings_store.h"
 #include "state_message.h"
+#include "update_command.h"
+#include "updater.h"
 #include "web_ui.h"
 #include "wifi_plan.h"
 
@@ -32,11 +34,13 @@ struct RemoteCommand {
 
 class Supervisor {
  public:
-  explicit Supervisor(storage::SettingsStore& store) : store_(store) {}
+  explicit Supervisor(storage::SettingsStore& store) : store_(store), updater_(store, *this) {}
 
   // From setup(): reads the saved settings, prints the access point name and
   // password and the device id on the serial link, then starts the task.
-  void begin();
+  // `firmwareVersion` (git describe) and `updateKey` (the owner's minisign
+  // public key) are compiled into the firmware.
+  void begin(const char* firmwareVersion, const char* updateKey);
 
   // From the regulation loop, once per measurement cycle. Never blocks.
   void publish(const supervision::StateSnapshot& snapshot);
@@ -55,6 +59,20 @@ class Supervisor {
   // reachable. Dropped if the queue is full. Never blocks.
   void sendEvent(const char (&event)[supervision::kEventSize]);
 
+  // Events waiting for the broker. Never blocks.
+  size_t eventsPending() const;
+
+  // Remote update (RG-mise-a-jour-a-distance), from the regulation loop:
+  // whether a fault forbids it, every cycle; the licence typed on the serial
+  // link; and the validation of a new firmware, every iteration.
+  void setUpdateFault(bool fault) { updater_.setFault(fault); }
+  update::LicenceOutcome setUpdateLicence(const char* licence) {
+    return updater_.setLicence(licence);
+  }
+  void watchUpdate(uint32_t nowMs, bool airRetained) {
+    updater_.watchBoot(nowMs, airRetained, brokerConnected_.load(), eventsPending() == 0);
+  }
+
  private:
   static void taskEntry(void* self);
   void run();
@@ -67,6 +85,7 @@ class Supervisor {
   void startNtp();
   void publishPending();
   void handleCommand(mqtt::CommandTopic topic, const uint8_t* payload, size_t length);
+  void handleUpdateCommand(const uint8_t* payload, size_t length);
   void rejectCommand(const char* subtopic, const char* reason);
 
   storage::SettingsStore& store_;
@@ -95,6 +114,8 @@ class Supervisor {
   std::atomic<bool> portalRequested_{false};
   QueueHandle_t commands_ = nullptr;
   QueueHandle_t events_ = nullptr;
+  std::atomic<bool> brokerConnected_{false};
+  Updater updater_;
 };
 
 }  // namespace terrarium::network
