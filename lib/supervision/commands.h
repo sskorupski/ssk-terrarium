@@ -12,6 +12,7 @@
 #include "posix_tz.h"
 #include "probe_heater.h"
 #include "time_windows.h"
+#include "ventilation.h"
 
 namespace terrarium::supervision {
 
@@ -32,6 +33,7 @@ enum class ConfigError : uint8_t {
   kBadSafety,       // "mise_en_securite" is not {"air": true|false}.
   kBadProbes,       // "sondes" is not a non-empty object of known probes and roles.
   kBadCombination,  // "combinaison" is not a known combination.
+  kBadFan,          // "ventilation" is not a non-empty object of whole minutes and "HH:MM".
 };
 
 // What a cmd/config carries. Each part is applied only if present.
@@ -50,13 +52,18 @@ struct ConfigCommand {
   control::ProbeRole roles[control::kProbeCount];
   bool hasCombination;
   control::ProbeCombination combination;
+  // Fields of "ventilation", merged with the current settings by the loop,
+  // which checks the bounds (RG-ventilation-periodique, RG-reglages-bornes).
+  bool hasFan;
+  control::FanSettingsPatch fan;
 };
 
 // cmd/config: a JSON object with any of "consigne" and "hysteresis" in C,
 // "plages" (a list of "HH:MM-HH:MM"), "fuseau" (a POSIX TZ string) and
 // "mise_en_securite" (an object whose only key, "air", is a boolean),
-// "sondes" (an object of probe names to "interieure" or "exterieure") and
-// "combinaison" (a combination name).
+// "sondes" (an object of probe names to "interieure" or "exterieure"),
+// "combinaison" (a combination name) and "ventilation" (an object of any of
+// "duree" and "periode" in whole minutes, and "heure" as "HH:MM").
 // Missing heat fields keep their `current` value. On any error, `out` is left
 // untouched: the command is refused whole (RG-reglages-bornes).
 ConfigError parseConfigPayload(const uint8_t* payload, size_t length,
@@ -93,6 +100,7 @@ enum class SettingOutcome : uint8_t {
   kApplied,
   kNotSaved,         // Applied, but lost at the next power cut.
   kNoInteriorProbe,  // Refused whole: no probe would stay interior (RG-reglages-bornes).
+  kInvalidFan,       // Refused whole: ventilation out of bounds (RG-reglages-bornes).
 };
 
 // Events published on ssk-terrarium/<id>/event. Return false if truncated.
@@ -110,6 +118,9 @@ bool formatProbeSetupEvent(const control::ProbeSetup& setup, SettingOutcome outc
 // A heating pulse of the SHT45, with its reason (RG-chauffe-de-la-sht45).
 // `reason` must not be kNone.
 bool formatProbeHeatingEvent(control::HeatReason reason, char (&out)[kEventSize]);
+// The ventilation settings applied, or refused.
+bool formatFanSettingsEvent(const control::FanSettings& settings, SettingOutcome outcome,
+                            char (&out)[kEventSize]);
 // `subtopic` and `reason` are fixed strings of the firmware, quoted verbatim.
 bool formatRejectedCommandEvent(const char* subtopic, const char* reason, char (&out)[kEventSize]);
 

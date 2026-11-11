@@ -33,6 +33,7 @@
 #include "substrate_sensor.h"
 #include "supervisor.h"
 #include "time_windows.h"
+#include "ventilation.h"
 
 // Set by outils/version_firmware.py from `git describe`.
 #ifndef FIRMWARE_VERSION
@@ -43,6 +44,8 @@ namespace cfg = terrarium::config;
 using terrarium::control::AirMeasure;
 using terrarium::control::AirRejection;
 using terrarium::control::AirSource;
+using terrarium::control::FanScheduler;
+using terrarium::control::FanSettings;
 using terrarium::control::HeatGuard;
 using terrarium::control::HeatingPolicy;
 using terrarium::control::HeatReason;
@@ -106,6 +109,12 @@ constexpr terrarium::control::HeatSettingsBounds kHeatBounds{
     cfg::kSetpointMinC, cfg::kSetpointMaxC, cfg::kHeatHysteresisMinC, cfg::kHeatHysteresisMaxC,
     cfg::kAlertTempHighC};
 HeatSettings heatSettings{cfg::kSetpointC, cfg::kHeatHysteresisC};
+// Ventilation (RG-ventilation-periodique): settings within compile-time
+// bounds (RG-reglages-bornes), and the schedule restarted at each mode change.
+constexpr terrarium::control::FanSettingsBounds kFanBounds{
+    cfg::kFanDurationMinMin, cfg::kFanDurationMaxMin, cfg::kFanPeriodMinMin, cfg::kFanPeriodMaxMin};
+FanSettings fanSettings{cfg::kFanDurationMin, cfg::kFanPeriodMin, cfg::kFanDailyMinute};
+FanScheduler fanScheduler(cfg::kFanDailyMinGapMs, cfg::kFanDailyFallbackMs);
 HysteresisRegulator activeHeating =
     HysteresisRegulator::aroundSetpoint(cfg::kSetpointC, cfg::kHeatHysteresisC);
 HysteresisRegulator frostHeating(cfg::kFrostHeatOnBelowC, cfg::kFrostHeatOffAtC);
@@ -312,8 +321,9 @@ void heatAirSensorIfDue(const terrarium::sensors::AirReading& reading, uint32_t 
   if (terrarium::supervision::formatProbeHeatingEvent(reason, event)) supervisor.sendEvent(event);
 }
 
-// One regulation step. Misting, light and fan stay off in phase 1
-// (RG-sorties-par-mode); the interior air in fault switches heating off, and so
+// One regulation step. Misting and light stay off (RG-sorties-par-mode); the
+// fan airs the tank by mode, whatever the measures (RG-ventilation-periodique);
+// the interior air in fault switches heating off, and so
 // do a hot substrate (RG-coupure-par-le-substrat) and heating for too long
 // (RG-chauffe-continue-bornee).
 void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
@@ -381,7 +391,11 @@ void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
   digitalWrite(cfg::kPinStatusLed, fault ? HIGH : LOW);
 
   // TODO(phase 2): light from the NTP time when policy.lightAllowed.
-  // TODO(phase 2): periodic fan cycles in ACTIF (kFanCyclePeriodMs).
+  next.fan =
+      fanScheduler.update(nowMs, policy.fan, fanSettings, timeKnown, timeKnown ? minuteOfDay() : 0);
+  if (next.fan != outputs.state().fan) {
+    Serial.println(next.fan ? "VENTILATION marche" : "VENTILATION arret");
+  }
   // TODO(phase 4): misting pulses on airMeasure's humidity when
   // policy.mistAllowed and health is kOk (2026-007, decision 03).
   outputs.apply(next);
@@ -459,6 +473,8 @@ void publishState(const terrarium::sensors::SubstrateReading& substrate, uint32_
   snapshot.timeKnown = timeKnown;
   snapshot.inWindow = timeKnown && terrarium::control::inAnyWindow(timeWindows, minuteOfDay());
   snapshot.bounds = kHeatBounds;
+  snapshot.fanSettings = fanSettings;
+  snapshot.fanBounds = kFanBounds;
   supervisor.publish(snapshot);
 }
 
@@ -482,7 +498,10 @@ void applyMode(Mode target) {
   // command still shows that the board answered.
   const char* name = terrarium::control::toString(target);
   ModeOutcome outcome = ModeOutcome::kApplied;
-  if (!modeMachine.request(target)) {
+  const bool changed = modeMachine.request(target);
+  // A mode change restarts the ventilation count (RG-ventilation-periodique).
+  if (changed) fanScheduler.restart(millis());
+  if (!changed) {
     outcome = ModeOutcome::kAlreadyActive;
     Serial.printf("MODE %s deja actif\r\n", name);
   } else if (settingsStore.saveMode(terrarium::control::modeToStored(target))) {
@@ -592,9 +611,43 @@ void applyProbeSetup(const ProbeSetup& next) {
   }
 }
 
+void printFanSettings(const char* suffix) {
+  char time[terrarium::control::kClockTimeTextLength + 1] = "--:--";
+  terrarium::control::formatClockTime(fanSettings.dailyMinute, time);
+  Serial.printf("VENTILATION duree=%umin periode=%umin heure=%s%s\r\n",
+                static_cast<unsigned>(fanSettings.durationMin),
+                static_cast<unsigned>(fanSettings.periodMin), time, suffix);
+}
+
+void refuseFanSettings(const FanSettings& candidate) {
+  Serial.println(
+      "REFUS ventilation : duree 1-30 min, periode 15-240 min, duree sous la periode, heure "
+      "HH:MM");
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatFanSettingsEvent(
+          candidate, terrarium::supervision::SettingOutcome::kInvalidFan, event)) {
+    supervisor.sendEvent(event);
+  }
+}
+
+// Replaces the ventilation settings (already within bounds), saves and
+// reports them. The count is not restarted: they apply at the next step.
+void applyFanSettings(const FanSettings& next) {
+  using terrarium::supervision::SettingOutcome;
+  fanSettings = next;
+  const bool saved = settingsStore.saveFanSettings(fanSettings);
+  printFanSettings(saved ? " enregistree, conservee apres coupure"
+                         : " appliquee mais non enregistree");
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatFanSettingsEvent(
+          fanSettings, saved ? SettingOutcome::kApplied : SettingOutcome::kNotSaved, event)) {
+    supervisor.sendEvent(event);
+  }
+}
+
 // A cmd/config: refused whole if it would leave no interior probe, or if its
-// heat part is out of bounds (RG-reglages-bornes); windows and time zone were
-// validated by the parser.
+// ventilation or heat part is out of bounds (RG-reglages-bornes); windows and
+// time zone were validated by the parser.
 void applyConfig(const terrarium::supervision::ConfigCommand& config) {
   const bool hasProbes = config.hasRole[0] || config.hasRole[1] || config.hasCombination;
   ProbeSetup nextProbes = probeSetup;
@@ -611,6 +664,11 @@ void applyConfig(const terrarium::supervision::ConfigCommand& config) {
     }
     return;
   }
+  const FanSettings nextFan = terrarium::control::merged(fanSettings, config.fan);
+  if (config.hasFan && !terrarium::control::isAcceptedFanSettings(nextFan, kFanBounds)) {
+    refuseFanSettings(nextFan);
+    return;
+  }
   if (config.hasHeat) {
     const bool accepted = terrarium::control::isAcceptedHeatSettings(config.heat, kHeatBounds);
     applyHeatSettings(config.heat);  // Applies it, or reports the refusal.
@@ -620,6 +678,7 @@ void applyConfig(const terrarium::supervision::ConfigCommand& config) {
   if (config.hasTimezone) applyTimezone(config.timezone);
   if (config.hasAirSafety) applyAirSafety(config.airSafety);
   if (hasProbes) applyProbeSetup(nextProbes);
+  if (config.hasFan) applyFanSettings(nextFan);
 }
 
 // Commands received over MQTT, applied here, in the regulation loop.
@@ -731,6 +790,45 @@ bool handleProbeLine(const char* line) {
   return false;
 }
 
+// VENTILATION on the serial link. Returns false if `line` is not it.
+bool handleFanLine(const char* line) {
+  FanSettings next = fanSettings;
+  switch (terrarium::control::parseFanCommand(line, fanSettings, next)) {
+    case SettingCommand::kShow:
+      printFanSettings(" actuelle");
+      return true;
+    case SettingCommand::kSet:
+      if (terrarium::control::isAcceptedFanSettings(next, kFanBounds)) {
+        applyFanSettings(next);
+      } else {
+        refuseFanSettings(next);
+      }
+      return true;
+    case SettingCommand::kInvalid:
+      Serial.println(
+          "REFUS ventilation : VENTILATION DUREE <minutes>, VENTILATION PERIODE <minutes> ou "
+          "VENTILATION HEURE <HH:MM>");
+      return true;
+    case SettingCommand::kNone:
+      break;
+  }
+  return false;
+}
+
+// Restores the saved ventilation settings if within the bounds of this
+// firmware, else keeps its defaults (RG-mode-au-demarrage).
+void restoreFanSettings() {
+  FanSettings stored{};
+  if (settingsStore.loadFanSettings(stored)) {
+    if (terrarium::control::isAcceptedFanSettings(stored, kFanBounds)) {
+      fanSettings = stored;
+    } else {
+      Serial.println("INFO ventilation enregistree hors bornes, valeurs du firmware");
+    }
+  }
+  printFanSettings(" au demarrage");
+}
+
 // Restores the saved roles and combination if valid, else the firmware's
 // (RG-mode-au-demarrage): the SHT45 alone interior.
 void restoreProbeSetup() {
@@ -773,11 +871,12 @@ void handleSerialLine(const char* line) {
   }
   if (handleScheduleLine(line)) return;
   if (handleProbeLine(line)) return;
+  if (handleFanLine(line)) return;
   Mode target = modeMachine.mode();
   if (!terrarium::control::parseModeCommand(line, target)) {
     Serial.println(
         "ERREUR commande inconnue (MODE ACTIF|PLAGES|HIBERNATION|MAINTENANCE, PLAGES, FUSEAU, "
-        "SONDES, SONDE, COMBINAISON, WIFI CONFIGURER)");
+        "SONDES, SONDE, COMBINAISON, VENTILATION, WIFI CONFIGURER)");
     return;
   }
   applyMode(target);
@@ -846,6 +945,9 @@ void setup() {
   restoreAirSafety();
   restoreProbeSetup();
   restoreSchedule();
+  restoreFanSettings();
+  // Periods count from the boot: the first one begins with an airing.
+  fanScheduler.restart(millis());
 
   // Supervision: started last, in its own task, and none of it is awaited.
   supervisor.begin();

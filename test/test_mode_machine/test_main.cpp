@@ -1,7 +1,9 @@
 #include <unity.h>
 
 #include "mode_machine.h"
+#include "ventilation.h"
 
+using terrarium::control::FanPolicy;
 using terrarium::control::HeatingPolicy;
 using terrarium::control::Mode;
 using terrarium::control::modeFromStored;
@@ -21,6 +23,7 @@ void test_active_policy() {
   TEST_ASSERT_EQUAL(HeatingPolicy::kSetpoint, policy.heating);
   TEST_ASSERT_TRUE(policy.mistAllowed);
   TEST_ASSERT_TRUE(policy.lightAllowed);
+  TEST_ASSERT_EQUAL(FanPolicy::kPeriodic, policy.fan);  // RG-sorties-par-mode.
 }
 
 void test_hibernation_policy() {
@@ -28,6 +31,7 @@ void test_hibernation_policy() {
   TEST_ASSERT_EQUAL(HeatingPolicy::kFrostProtection, policy.heating);
   TEST_ASSERT_FALSE(policy.mistAllowed);
   TEST_ASSERT_FALSE(policy.lightAllowed);
+  TEST_ASSERT_EQUAL(FanPolicy::kDaily, policy.fan);  // RG-sorties-par-mode.
 }
 
 void test_maintenance_policy() {
@@ -35,6 +39,7 @@ void test_maintenance_policy() {
   TEST_ASSERT_EQUAL(HeatingPolicy::kOff, policy.heating);
   TEST_ASSERT_FALSE(policy.mistAllowed);
   TEST_ASSERT_FALSE(policy.lightAllowed);
+  TEST_ASSERT_EQUAL(FanPolicy::kOff, policy.fan);  // RG-sorties-par-mode.
 }
 
 void test_keeps_initial_mode_until_requested() {
@@ -111,6 +116,7 @@ void test_schedule_policy() {
   TEST_ASSERT_EQUAL(HeatingPolicy::kSchedule, policy.heating);
   TEST_ASSERT_TRUE(policy.mistAllowed);
   TEST_ASSERT_TRUE(policy.lightAllowed);
+  TEST_ASSERT_EQUAL(FanPolicy::kPeriodic, policy.fan);
 }
 
 // RG-topics-mqtt: cmd/mode accepts PLAGES; NVS keeps the bytes of the

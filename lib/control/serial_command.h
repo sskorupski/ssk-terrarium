@@ -5,6 +5,7 @@
 #include "mode_machine.h"
 #include "posix_tz.h"
 #include "time_windows.h"
+#include "ventilation.h"
 
 namespace terrarium::control {
 
@@ -31,5 +32,11 @@ SettingCommand parseWindowsCommand(const char* line, TimeWindows& out);
 // "FUSEAU" or "FUSEAU <POSIX TZ>", with an optional trailing CR
 // (ADR-heure-par-ntp).
 SettingCommand parseTimezoneCommand(const char* line, char (&out)[kTimezoneSize]);
+
+// "VENTILATION", or "VENTILATION DUREE <minutes>", "VENTILATION PERIODE
+// <minutes>", "VENTILATION HEURE <HH:MM>", with an optional trailing CR
+// (RG-ventilation-periodique). kSet writes `current` with the one field
+// changed; whether it is within bounds is checked by the caller.
+SettingCommand parseFanCommand(const char* line, const FanSettings& current, FanSettings& out);
 
 }  // namespace terrarium::control

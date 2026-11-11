@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+#include "ventilation.h"
+
 namespace terrarium::control {
 
 enum class Mode : uint8_t {
@@ -24,6 +26,7 @@ struct ModePolicy {
   HeatingPolicy heating;
   bool mistAllowed;
   bool lightAllowed;
+  FanPolicy fan;  // RG-ventilation-periodique.
 };
 
 // Policy of a mode. Constant per mode, independent of the network.

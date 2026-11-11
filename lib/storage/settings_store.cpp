@@ -21,6 +21,9 @@ constexpr char kTimeWindowsKey[] = "plages";
 constexpr char kTimezoneKey[] = "fuseau";
 constexpr char kAirSafetyKey[] = "securite_air";
 constexpr char kProbeSetupKey[] = "sondes";
+// Duration, period and time of day, two little-endian bytes each.
+constexpr char kFanKey[] = "ventilation";
+constexpr size_t kFanStoredSize = 6;
 
 }  // namespace
 
@@ -144,6 +147,36 @@ bool SettingsStore::saveTimezone(const char* timezone) {
   Preferences preferences;
   if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
   const bool written = preferences.putString(kTimezoneKey, timezone) == std::strlen(timezone);
+  preferences.end();
+  return written;
+}
+
+bool SettingsStore::loadFanSettings(control::FanSettings& out) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  uint8_t stored[kFanStoredSize] = {};
+  const bool found = preferences.isKey(kFanKey) &&
+                     preferences.getBytesLength(kFanKey) == kFanStoredSize &&
+                     preferences.getBytes(kFanKey, stored, sizeof(stored)) == kFanStoredSize;
+  preferences.end();
+  if (found) {
+    out.durationMin = static_cast<uint16_t>(stored[0] | (stored[1] << 8));
+    out.periodMin = static_cast<uint16_t>(stored[2] | (stored[3] << 8));
+    out.dailyMinute = static_cast<uint16_t>(stored[4] | (stored[5] << 8));
+  }
+  return found;
+}
+
+bool SettingsStore::saveFanSettings(const control::FanSettings& settings) {
+  const uint8_t stored[kFanStoredSize] = {static_cast<uint8_t>(settings.durationMin & 0xFF),
+                                          static_cast<uint8_t>(settings.durationMin >> 8),
+                                          static_cast<uint8_t>(settings.periodMin & 0xFF),
+                                          static_cast<uint8_t>(settings.periodMin >> 8),
+                                          static_cast<uint8_t>(settings.dailyMinute & 0xFF),
+                                          static_cast<uint8_t>(settings.dailyMinute >> 8)};
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool written = preferences.putBytes(kFanKey, stored, sizeof(stored)) == sizeof(stored);
   preferences.end();
   return written;
 }

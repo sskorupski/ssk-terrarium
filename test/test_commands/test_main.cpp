@@ -328,6 +328,70 @@ void test_probe_setup_events() {
       std::strstr(out, "\"resultat\":\"refuse\",\"raison\":\"aucune sonde interieure\"}"));
 }
 
+// RG-topics-mqtt: "ventilation" is a partial object, in whole minutes and
+// "HH:MM"; the bounds are checked by the loop (RG-reglages-bornes).
+void test_config_payload_carries_the_ventilation() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(
+      ConfigError::kNone,
+      parseCommand("{\"ventilation\":{\"duree\":10,\"periode\":90,\"heure\":\"14:30\"}}", command));
+  TEST_ASSERT_TRUE(command.hasFan);
+  TEST_ASSERT_TRUE(command.fan.hasDuration);
+  TEST_ASSERT_EQUAL_UINT16(10, command.fan.durationMin);
+  TEST_ASSERT_TRUE(command.fan.hasPeriod);
+  TEST_ASSERT_EQUAL_UINT16(90, command.fan.periodMin);
+  TEST_ASSERT_TRUE(command.fan.hasDailyMinute);
+  TEST_ASSERT_EQUAL_UINT16(14 * 60 + 30, command.fan.dailyMinute);
+  TEST_ASSERT_FALSE(command.hasHeat);
+}
+
+void test_config_payload_carries_part_of_the_ventilation() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone, parseCommand("{\"ventilation\":{\"duree\":3}}", command));
+  TEST_ASSERT_TRUE(command.hasFan);
+  TEST_ASSERT_TRUE(command.fan.hasDuration);
+  TEST_ASSERT_FALSE(command.fan.hasPeriod);
+  TEST_ASSERT_FALSE(command.fan.hasDailyMinute);
+}
+
+// Out of bounds but well formed: parsed here, refused by the loop.
+void test_config_payload_leaves_the_ventilation_bounds_to_the_loop() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone, parseCommand("{\"ventilation\":{\"duree\":45}}", command));
+  TEST_ASSERT_EQUAL_UINT16(45, command.fan.durationMin);
+}
+
+void test_config_payload_refuses_a_bad_ventilation() {
+  for (const char* json :
+       {"{\"ventilation\":{}}", "{\"ventilation\":5}", "{\"ventilation\":{\"duree\":5.5}}",
+        "{\"ventilation\":{\"duree\":-1}}", "{\"ventilation\":{\"duree\":70000}}",
+        "{\"ventilation\":{\"duree\":\"5\"}}", "{\"ventilation\":{\"duree\":true}}",
+        "{\"ventilation\":{\"heure\":\"25:00\"}}", "{\"ventilation\":{\"heure\":780}}",
+        "{\"ventilation\":{\"vitesse\":2}}",
+        "{\"consigne\":20,\"ventilation\":{\"periode\":null}}"}) {
+    ConfigCommand command{};
+    TEST_ASSERT_EQUAL_MESSAGE(ConfigError::kBadFan, parseCommand(json, command), json);
+  }
+  TEST_ASSERT_EQUAL_STRING("ventilation invalide", describe(ConfigError::kBadFan));
+}
+
+void test_fan_settings_events() {
+  char out[kEventSize];
+  const terrarium::control::FanSettings settings{5, 60, 13 * 60};
+  TEST_ASSERT_TRUE(formatFanSettingsEvent(settings, SettingOutcome::kApplied, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"ventilation\":{\"duree\":5,\"periode\":60,\"heure\":\"13:00\"},"
+      "\"resultat\":\"applique\"}",
+      out);
+  TEST_ASSERT_TRUE(formatFanSettingsEvent(settings, SettingOutcome::kNotSaved, out));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"resultat\":\"applique_non_enregistre\"}"));
+  const terrarium::control::FanSettings refused{45, 60, 13 * 60};
+  TEST_ASSERT_TRUE(formatFanSettingsEvent(refused, SettingOutcome::kInvalidFan, out));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"duree\":45"));
+  TEST_ASSERT_NOT_NULL(
+      std::strstr(out, "\"resultat\":\"refuse\",\"raison\":\"ventilation invalide\"}"));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_mode_payload_is_a_bare_name);
@@ -355,5 +419,10 @@ int main() {
   RUN_TEST(test_config_payload_carries_a_combination);
   RUN_TEST(test_config_payload_refuses_a_bad_combination);
   RUN_TEST(test_probe_setup_events);
+  RUN_TEST(test_config_payload_carries_the_ventilation);
+  RUN_TEST(test_config_payload_carries_part_of_the_ventilation);
+  RUN_TEST(test_config_payload_leaves_the_ventilation_bounds_to_the_loop);
+  RUN_TEST(test_config_payload_refuses_a_bad_ventilation);
+  RUN_TEST(test_fan_settings_events);
   return UNITY_END();
 }
