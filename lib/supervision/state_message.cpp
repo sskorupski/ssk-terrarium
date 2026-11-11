@@ -1,5 +1,6 @@
 #include "state_message.h"
 
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 
@@ -39,6 +40,88 @@ bool appendProbe(char* out, size_t size, size_t& used, control::Probe probe,
   if (written <= 0 || used + static_cast<size_t>(written) >= size) return false;
   used += static_cast<size_t>(written);
   return true;
+}
+
+// Appends a formatted string at `used`. False if it does not fit.
+__attribute__((format(printf, 4, 5))) bool appendf(char* out, size_t size, size_t& used,
+                                                   const char* format, ...) {
+  if (used >= size) return false;
+  va_list args;
+  va_start(args, format);
+  const int written = std::vsnprintf(out + used, size - used, format, args);
+  va_end(args);
+  if (written < 0 || used + static_cast<size_t>(written) >= size) return false;
+  used += static_cast<size_t>(written);
+  return true;
+}
+
+// "HH:MM-HH:MM" quoted, or null if the window is not valid.
+void quotedDay(const control::DayWindow& window, char (&out)[control::kDayWindowTextLength + 3]) {
+  char text[control::kDayWindowTextLength + 1];
+  if (control::formatDayWindow(window, text)) {
+    std::snprintf(out, sizeof(out), "\"%s\"", text);
+  } else {
+    std::snprintf(out, sizeof(out), "null");
+  }
+}
+
+// "jour_nuit", "jour_aujourdhui" and "moment" (RG-jour-et-nuit).
+bool appendDayNight(char* out, size_t size, size_t& used, const StateSnapshot& s) {
+  const control::DayNight& d = s.dayNight;
+  char day[control::kDayWindowTextLength + 3];
+  if (d.mode == control::DayNightMode::kSeasons) {
+    if (!appendf(out, size, used, ",\"jour_nuit\":{\"mode\":\"saisons\",\"saisons\":[")) {
+      return false;
+    }
+    const uint8_t count = d.seasonCount <= control::kMaxSeasons ? d.seasonCount : 0;
+    for (uint8_t i = 0; i < count; ++i) {
+      char start[control::kMonthDayTextLength + 1] = "";
+      control::formatMonthDay(d.seasons[i].startDay, start);
+      quotedDay(d.seasons[i].day, day);
+      if (!appendf(out, size, used, "%s{\"debut\":\"%s\",\"jour\":%s}", i > 0 ? "," : "", start,
+                   day)) {
+        return false;
+      }
+    }
+    if (!appendf(out, size, used, "]}")) return false;
+  } else {
+    quotedDay(d.fixed, day);
+    if (!appendf(out, size, used, ",\"jour_nuit\":{\"mode\":\"metronome\",\"jour\":%s}", day)) {
+      return false;
+    }
+  }
+  char today[control::kDayWindowTextLength + 3] = "null";
+  if (s.timeKnown) quotedDay(s.today, today);
+  return appendf(out, size, used, ",\"jour_aujourdhui\":%s,\"moment\":\"%s\"", today,
+                 control::momentName(s.moment));
+}
+
+bool appendRhythm(char* out, size_t size, size_t& used, const char* name,
+                  const control::FanRhythm& r) {
+  return appendf(out, size, used,
+                 "\"%s\":{\"mode\":\"%s\",\"duree\":%u,\"periode\":%u,\"ecart\":%u}", name,
+                 control::fanModeName(r.mode), unsigned{r.durationMin}, unsigned{r.periodMin},
+                 unsigned{r.spreadPercent});
+}
+
+// "ventilation" (RG-ventilation-periodique). An invalid time is null.
+bool appendFan(char* out, size_t size, size_t& used, const control::FanSettings& f) {
+  char time[control::kClockTimeTextLength + 3] = "null";
+  char clock[control::kClockTimeTextLength + 1];
+  if (control::formatClockTime(f.hibernation.dailyMinute, clock)) {
+    std::snprintf(time, sizeof(time), "\"%s\"", clock);
+  }
+  const control::SaturationOption& sat = f.saturation;
+  return appendf(out, size, used, ",\"ventilation\":{") &&
+         appendRhythm(out, size, used, "jour", f.day) && appendf(out, size, used, ",") &&
+         appendRhythm(out, size, used, "nuit", f.night) &&
+         appendf(out, size, used,
+                 ",\"hibernation\":{\"heure\":%s,\"duree\":%u},\"saturation\":{\"active\":%s,"
+                 "\"comportement\":\"%s\",\"humidite\":%u,\"attente\":%u,\"duree\":%u,"
+                 "\"pause\":%u}}",
+                 time, unsigned{f.hibernation.durationMin}, boolText(sat.active),
+                 control::behaviourName(sat.behaviour), unsigned{sat.humidityPercent},
+                 unsigned{sat.waitMin}, unsigned{sat.durationMin}, unsigned{sat.pauseMin});
 }
 
 }  // namespace
@@ -110,32 +193,35 @@ size_t formatState(const StateSnapshot& s, char* out, size_t size) {
   }
   const char* timezone = control::isValidPosixTimezone(s.timezone) ? s.timezone : "";
   const char* inWindow = s.timeKnown ? boolText(s.inWindow) : "null";
-  // An invalid time of day is published as null, never as a time.
-  char fanTime[control::kClockTimeTextLength + 3] = "null";
-  char clock[control::kClockTimeTextLength + 1];
-  if (control::formatClockTime(s.fanSettings.dailyMinute, clock)) {
-    std::snprintf(fanTime, sizeof(fanTime), "\"%s\"", clock);
+  if (!appendf(out, size, used,
+               ",\"plages\":[%s],\"fuseau\":\"%s\",\"heure_connue\":%s,\"en_plage\":%s", windows,
+               timezone, boolText(s.timeKnown), inWindow) ||
+      !appendDayNight(out, size, used, s) || !appendFan(out, size, used, s.fanSettings) ||
+      !appendf(out, size, used,
+               ",\"aeration_saturation\":%s,\"chauffage_nuit\":{\"consigne\":%.1f,"
+               "\"hysteresis\":%.1f}",
+               boolText(s.saturationRunning), s.nightHeat.setpointC, s.nightHeat.hysteresisC)) {
+    return 0;
   }
-  const int tail =
-      std::snprintf(out + used, size - used,
-                    ",\"plages\":[%s],\"fuseau\":\"%s\",\"heure_connue\":%s,"
-                    "\"en_plage\":%s,\"ventilation\":{\"duree\":%u,\"periode\":%u,\"heure\":%s},"
-                    "\"bornes\":{\"consigne\":[%.1f,%.1f],"
-                    "\"hysteresis\":[%.1f,%.1f],\"somme_max\":%.1f,"
-                    "\"plages_max\":%u,\"fuseau_max\":%u,\"combinaisons\":[%s],"
-                    "\"ventilation\":{\"duree\":[%u,%u],\"periode\":[%u,%u]}}}",
-                    windows, timezone, boolText(s.timeKnown), inWindow,
-                    static_cast<unsigned>(s.fanSettings.durationMin),
-                    static_cast<unsigned>(s.fanSettings.periodMin), fanTime, s.bounds.setpointMinC,
-                    s.bounds.setpointMaxC, s.bounds.hysteresisMinC, s.bounds.hysteresisMaxC,
-                    s.bounds.stopBelowC, static_cast<unsigned>(control::kMaxTimeWindows),
-                    static_cast<unsigned>(control::kTimezoneMaxLength), combinations,
-                    static_cast<unsigned>(s.fanBounds.durationMinMin),
-                    static_cast<unsigned>(s.fanBounds.durationMaxMin),
-                    static_cast<unsigned>(s.fanBounds.periodMinMin),
-                    static_cast<unsigned>(s.fanBounds.periodMaxMin));
-  if (tail <= 0 || used + static_cast<size_t>(tail) >= size) return 0;
-  return used + static_cast<size_t>(tail);
+  const control::FanSettingsBounds& f = s.fanBounds;
+  if (!appendf(out, size, used,
+               ",\"bornes\":{\"consigne\":[%.1f,%.1f],\"hysteresis\":[%.1f,%.1f],"
+               "\"somme_max\":%.1f,\"plages_max\":%u,\"fuseau_max\":%u,\"combinaisons\":[%s],"
+               "\"saisons_max\":%u,\"ventilation\":{\"duree\":[%u,%u],\"periode\":[%u,%u],"
+               "\"ecart\":[%u,%u],\"humidite\":[%u,%u],\"attente\":[%u,%u],\"pause\":[%u,%u]}}}",
+               s.bounds.setpointMinC, s.bounds.setpointMaxC, s.bounds.hysteresisMinC,
+               s.bounds.hysteresisMaxC, s.bounds.stopBelowC,
+               static_cast<unsigned>(control::kMaxTimeWindows),
+               static_cast<unsigned>(control::kTimezoneMaxLength), combinations,
+               static_cast<unsigned>(control::kMaxSeasons), unsigned{f.durationMinMin},
+               unsigned{f.durationMaxMin}, unsigned{f.periodMinMin}, unsigned{f.periodMaxMin},
+               unsigned{f.spreadMinPercent}, unsigned{f.spreadMaxPercent},
+               unsigned{f.humidityMinPercent}, unsigned{f.humidityMaxPercent},
+               unsigned{f.waitMinMin}, unsigned{f.waitMaxMin}, unsigned{f.pauseMinMin},
+               unsigned{f.pauseMaxMin})) {
+    return 0;
+  }
+  return used;
 }
 
 }  // namespace terrarium::supervision

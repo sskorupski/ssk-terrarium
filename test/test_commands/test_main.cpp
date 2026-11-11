@@ -328,68 +328,163 @@ void test_probe_setup_events() {
       std::strstr(out, "\"resultat\":\"refuse\",\"raison\":\"aucune sonde interieure\"}"));
 }
 
-// RG-topics-mqtt: "ventilation" is a partial object, in whole minutes and
-// "HH:MM"; the bounds are checked by the loop (RG-reglages-bornes).
+// RG-topics-mqtt (2026-015): "ventilation" is partial at two levels; the
+// bounds are checked by the loop (RG-reglages-bornes).
 void test_config_payload_carries_the_ventilation() {
   ConfigCommand command{};
   TEST_ASSERT_EQUAL(
       ConfigError::kNone,
-      parseCommand("{\"ventilation\":{\"duree\":10,\"periode\":90,\"heure\":\"14:30\"}}", command));
+      parseCommand("{\"ventilation\":{\"jour\":{\"mode\":\"rubato\",\"duree\":10,\"periode\":90,"
+                   "\"ecart\":40},\"nuit\":{\"periode\":120},\"hibernation\":{\"heure\":\"14:30\","
+                   "\"duree\":7},\"saturation\":{\"active\":true,\"comportement\":\"continu\","
+                   "\"humidite\":97,\"attente\":5,\"duree\":3,\"pause\":30}}}",
+                   command));
   TEST_ASSERT_TRUE(command.hasFan);
-  TEST_ASSERT_TRUE(command.fan.hasDuration);
-  TEST_ASSERT_EQUAL_UINT16(10, command.fan.durationMin);
-  TEST_ASSERT_TRUE(command.fan.hasPeriod);
-  TEST_ASSERT_EQUAL_UINT16(90, command.fan.periodMin);
-  TEST_ASSERT_TRUE(command.fan.hasDailyMinute);
-  TEST_ASSERT_EQUAL_UINT16(14 * 60 + 30, command.fan.dailyMinute);
-  TEST_ASSERT_FALSE(command.hasHeat);
-}
-
-void test_config_payload_carries_part_of_the_ventilation() {
-  ConfigCommand command{};
-  TEST_ASSERT_EQUAL(ConfigError::kNone, parseCommand("{\"ventilation\":{\"duree\":3}}", command));
-  TEST_ASSERT_TRUE(command.hasFan);
-  TEST_ASSERT_TRUE(command.fan.hasDuration);
-  TEST_ASSERT_FALSE(command.fan.hasPeriod);
-  TEST_ASSERT_FALSE(command.fan.hasDailyMinute);
+  const terrarium::control::FanSettingsPatch& f = command.fan;
+  TEST_ASSERT_TRUE(f.day.hasMode);
+  TEST_ASSERT_EQUAL(terrarium::control::FanMode::kRubato, f.day.mode);
+  TEST_ASSERT_EQUAL_UINT16(10, f.day.durationMin);
+  TEST_ASSERT_EQUAL_UINT16(90, f.day.periodMin);
+  TEST_ASSERT_EQUAL_UINT16(40, f.day.spreadPercent);
+  TEST_ASSERT_FALSE(f.night.hasMode);
+  TEST_ASSERT_TRUE(f.night.hasPeriod);
+  TEST_ASSERT_EQUAL_UINT16(14 * 60 + 30, f.hibernation.dailyMinute);
+  TEST_ASSERT_EQUAL_UINT16(7, f.hibernation.durationMin);
+  TEST_ASSERT_TRUE(f.saturation.active);
+  TEST_ASSERT_EQUAL(terrarium::control::SaturationBehaviour::kContinuous, f.saturation.behaviour);
+  TEST_ASSERT_EQUAL_UINT16(97, f.saturation.humidityPercent);
+  TEST_ASSERT_EQUAL_UINT16(5, f.saturation.waitMin);
+  TEST_ASSERT_EQUAL_UINT16(3, f.saturation.durationMin);
+  TEST_ASSERT_EQUAL_UINT16(30, f.saturation.pauseMin);
 }
 
 // Out of bounds but well formed: parsed here, refused by the loop.
 void test_config_payload_leaves_the_ventilation_bounds_to_the_loop() {
   ConfigCommand command{};
-  TEST_ASSERT_EQUAL(ConfigError::kNone, parseCommand("{\"ventilation\":{\"duree\":45}}", command));
-  TEST_ASSERT_EQUAL_UINT16(45, command.fan.durationMin);
+  TEST_ASSERT_EQUAL(ConfigError::kNone,
+                    parseCommand("{\"ventilation\":{\"nuit\":{\"duree\":45}}}", command));
+  TEST_ASSERT_EQUAL_UINT16(45, command.fan.night.durationMin);
 }
 
 void test_config_payload_refuses_a_bad_ventilation() {
   for (const char* json :
-       {"{\"ventilation\":{}}", "{\"ventilation\":5}", "{\"ventilation\":{\"duree\":5.5}}",
-        "{\"ventilation\":{\"duree\":-1}}", "{\"ventilation\":{\"duree\":70000}}",
-        "{\"ventilation\":{\"duree\":\"5\"}}", "{\"ventilation\":{\"duree\":true}}",
-        "{\"ventilation\":{\"heure\":\"25:00\"}}", "{\"ventilation\":{\"heure\":780}}",
-        "{\"ventilation\":{\"vitesse\":2}}",
-        "{\"consigne\":20,\"ventilation\":{\"periode\":null}}"}) {
+       {"{\"ventilation\":{}}", "{\"ventilation\":5}", "{\"ventilation\":{\"jour\":{}}}",
+        "{\"ventilation\":{\"duree\":5}}", "{\"ventilation\":{\"jour\":{\"duree\":5.5}}}",
+        "{\"ventilation\":{\"jour\":{\"duree\":-1}}}",
+        "{\"ventilation\":{\"jour\":{\"duree\":70000}}}",
+        "{\"ventilation\":{\"jour\":{\"duree\":\"5\"}}}",
+        "{\"ventilation\":{\"nuit\":{\"mode\":\"brise\"}}}",
+        "{\"ventilation\":{\"nuit\":{\"heure\":\"13:00\"}}}",
+        "{\"ventilation\":{\"hibernation\":{\"heure\":\"25:00\"}}}",
+        "{\"ventilation\":{\"hibernation\":{\"periode\":60}}}",
+        "{\"ventilation\":{\"saturation\":{\"active\":1}}}",
+        "{\"ventilation\":{\"saturation\":{\"comportement\":\"souvent\"}}}",
+        "{\"ventilation\":{\"saturation\":{\"humidite\":95.5}}}",
+        "{\"consigne\":20,\"ventilation\":{\"jour\":{\"periode\":null}}}"}) {
     ConfigCommand command{};
     TEST_ASSERT_EQUAL_MESSAGE(ConfigError::kBadFan, parseCommand(json, command), json);
   }
   TEST_ASSERT_EQUAL_STRING("ventilation invalide", describe(ConfigError::kBadFan));
 }
 
-void test_fan_settings_events() {
+// RG-jour-et-nuit: "jour_nuit" is whole, checked here, seasons sorted.
+void test_config_payload_carries_a_day_night() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(
+      ConfigError::kNone,
+      parseCommand("{\"jour_nuit\":{\"mode\":\"metronome\",\"jour\":\"07:30-20:00\"}}", command));
+  TEST_ASSERT_TRUE(command.hasDayNight);
+  TEST_ASSERT_EQUAL(terrarium::control::DayNightMode::kMetronome, command.dayNight.mode);
+  TEST_ASSERT_EQUAL_UINT16(7 * 60 + 30, command.dayNight.fixed.startMinute);
+  ConfigCommand seasons{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone,
+                    parseCommand("{\"jour_nuit\":{\"mode\":\"saisons\",\"saisons\":["
+                                 "{\"debut\":\"09-22\",\"jour\":\"07:30-19:30\"},"
+                                 "{\"debut\":\"03-20\",\"jour\":\"07:00-20:00\"}]}}",
+                                 seasons));
+  TEST_ASSERT_EQUAL(terrarium::control::DayNightMode::kSeasons, seasons.dayNight.mode);
+  TEST_ASSERT_EQUAL_UINT8(2, seasons.dayNight.seasonCount);
+  TEST_ASSERT_EQUAL_UINT16(78, seasons.dayNight.seasons[0].startDay);
+}
+
+void test_config_payload_refuses_a_bad_day_night() {
+  for (const char* json :
+       {"{\"jour_nuit\":{}}", "{\"jour_nuit\":{\"mode\":\"metronome\"}}",
+        "{\"jour_nuit\":{\"mode\":\"metronome\",\"jour\":\"21:00-08:00\"}}",
+        "{\"jour_nuit\":{\"mode\":\"metronome\",\"jour\":\"08:00-21:00\",\"saisons\":[]}}",
+        "{\"jour_nuit\":{\"mode\":\"saisons\",\"saisons\":[]}}",
+        "{\"jour_nuit\":{\"mode\":\"saisons\",\"saisons\":[{\"debut\":\"02-29\","
+        "\"jour\":\"08:00-21:00\"}]}}",
+        "{\"jour_nuit\":{\"mode\":\"saisons\",\"saisons\":[{\"debut\":\"03-20\","
+        "\"jour\":\"08:00-21:00\"},{\"debut\":\"03-20\",\"jour\":\"07:00-21:00\"}]}}",
+        "{\"jour_nuit\":{\"mode\":\"saisons\",\"saisons\":[{\"debut\":\"03-20\"}]}}",
+        "{\"jour_nuit\":{\"mode\":\"lune\",\"jour\":\"08:00-21:00\"}}"}) {
+    ConfigCommand command{};
+    TEST_ASSERT_EQUAL_MESSAGE(ConfigError::kBadDayNight, parseCommand(json, command), json);
+  }
+  TEST_ASSERT_EQUAL_STRING("jour_nuit invalide", describe(ConfigError::kBadDayNight));
+}
+
+void test_config_payload_refuses_seven_seasons() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(ConfigError::kBadDayNight,
+                    parseCommand("{\"jour_nuit\":{\"mode\":\"saisons\",\"saisons\":["
+                                 "{\"debut\":\"01-01\",\"jour\":\"08:00-18:00\"},"
+                                 "{\"debut\":\"02-01\",\"jour\":\"08:00-18:00\"},"
+                                 "{\"debut\":\"03-01\",\"jour\":\"08:00-18:00\"},"
+                                 "{\"debut\":\"04-01\",\"jour\":\"08:00-18:00\"},"
+                                 "{\"debut\":\"05-01\",\"jour\":\"08:00-18:00\"},"
+                                 "{\"debut\":\"06-01\",\"jour\":\"08:00-18:00\"},"
+                                 "{\"debut\":\"07-01\",\"jour\":\"08:00-18:00\"}]}}",
+                                 command));
+}
+
+// RG-chauffage-par-hysteresis (2026-016): "chauffage_nuit" is partial.
+void test_config_payload_carries_the_night_heating() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone,
+                    parseCommand("{\"chauffage_nuit\":{\"consigne\":17}}", command));
+  TEST_ASSERT_TRUE(command.hasNightHeat);
+  TEST_ASSERT_TRUE(command.nightHeat.hasSetpoint);
+  TEST_ASSERT_EQUAL_FLOAT(17.0f, command.nightHeat.setpointC);
+  TEST_ASSERT_FALSE(command.nightHeat.hasHysteresis);
+  TEST_ASSERT_FALSE(command.hasHeat);
+}
+
+void test_config_payload_refuses_a_bad_night_heating() {
+  for (const char* json :
+       {"{\"chauffage_nuit\":{}}", "{\"chauffage_nuit\":17}",
+        "{\"chauffage_nuit\":{\"consigne\":\"17\"}}", "{\"chauffage_nuit\":{\"consigne\":true}}",
+        "{\"chauffage_nuit\":{\"plancher\":12}}"}) {
+    ConfigCommand command{};
+    TEST_ASSERT_EQUAL_MESSAGE(ConfigError::kBadNightHeat, parseCommand(json, command), json);
+  }
+  TEST_ASSERT_EQUAL_STRING("chauffage_nuit invalide", describe(ConfigError::kBadNightHeat));
+}
+
+// Events of 2026-015 and 2026-016.
+void test_setting_events() {
   char out[kEventSize];
-  const terrarium::control::FanSettings settings{5, 60, 13 * 60};
-  TEST_ASSERT_TRUE(formatFanSettingsEvent(settings, SettingOutcome::kApplied, out));
+  TEST_ASSERT_TRUE(formatFieldEvent("ventilation", SettingOutcome::kApplied, out));
   TEST_ASSERT_EQUAL_STRING(
-      "{\"evenement\":\"reglage\",\"ventilation\":{\"duree\":5,\"periode\":60,\"heure\":\"13:00\"},"
-      "\"resultat\":\"applique\"}",
+      "{\"evenement\":\"reglage\",\"champ\":\"ventilation\",\"resultat\":\"applique\"}", out);
+  TEST_ASSERT_TRUE(formatFieldEvent("jour_nuit", SettingOutcome::kNotSaved, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"champ\":\"jour_nuit\","
+      "\"resultat\":\"applique_non_enregistre\"}",
       out);
-  TEST_ASSERT_TRUE(formatFanSettingsEvent(settings, SettingOutcome::kNotSaved, out));
-  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"resultat\":\"applique_non_enregistre\"}"));
-  const terrarium::control::FanSettings refused{45, 60, 13 * 60};
-  TEST_ASSERT_TRUE(formatFanSettingsEvent(refused, SettingOutcome::kInvalidFan, out));
-  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"duree\":45"));
-  TEST_ASSERT_NOT_NULL(
-      std::strstr(out, "\"resultat\":\"refuse\",\"raison\":\"ventilation invalide\"}"));
+  TEST_ASSERT_TRUE(formatFieldEvent("ventilation", SettingOutcome::kInvalidFan, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"champ\":\"ventilation\","
+      "\"resultat\":\"refuse\",\"raison\":\"ventilation invalide\"}",
+      out);
+  TEST_ASSERT_TRUE(formatNightHeatEvent(HeatSettings{17.0f, 0.5f}, true, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"chauffage_nuit\":{\"consigne\":17.0,"
+      "\"hysteresis\":0.5},\"resultat\":\"applique\"}",
+      out);
+  TEST_ASSERT_TRUE(formatNightHeatEvent(HeatSettings{23.0f, 1.5f}, false, out));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"resultat\":\"refuse\",\"raison\":\"hors bornes\"}"));
 }
 
 int main() {
@@ -420,9 +515,13 @@ int main() {
   RUN_TEST(test_config_payload_refuses_a_bad_combination);
   RUN_TEST(test_probe_setup_events);
   RUN_TEST(test_config_payload_carries_the_ventilation);
-  RUN_TEST(test_config_payload_carries_part_of_the_ventilation);
   RUN_TEST(test_config_payload_leaves_the_ventilation_bounds_to_the_loop);
   RUN_TEST(test_config_payload_refuses_a_bad_ventilation);
-  RUN_TEST(test_fan_settings_events);
+  RUN_TEST(test_config_payload_carries_a_day_night);
+  RUN_TEST(test_config_payload_refuses_a_bad_day_night);
+  RUN_TEST(test_config_payload_refuses_seven_seasons);
+  RUN_TEST(test_config_payload_carries_the_night_heating);
+  RUN_TEST(test_config_payload_refuses_a_bad_night_heating);
+  RUN_TEST(test_setting_events);
   return UNITY_END();
 }

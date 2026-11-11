@@ -2,10 +2,11 @@
 // logic: no hardware, no allocation.
 #pragma once
 
+#include <cstddef>
+
 #include "mode_machine.h"
 #include "posix_tz.h"
 #include "time_windows.h"
-#include "ventilation.h"
 
 namespace terrarium::control {
 
@@ -33,10 +34,13 @@ SettingCommand parseWindowsCommand(const char* line, TimeWindows& out);
 // (ADR-heure-par-ntp).
 SettingCommand parseTimezoneCommand(const char* line, char (&out)[kTimezoneSize]);
 
-// "VENTILATION", or "VENTILATION DUREE <minutes>", "VENTILATION PERIODE
-// <minutes>", "VENTILATION HEURE <HH:MM>", with an optional trailing CR
-// (RG-ventilation-periodique). kSet writes `current` with the one field
-// changed; whether it is within bounds is checked by the caller.
-SettingCommand parseFanCommand(const char* line, const FanSettings& current, FanSettings& out);
+// "CONFIG <json>", with an optional trailing CR: the same settings as
+// cmd/config (decision 05 of cadrage 2026-015). Returns the JSON and its
+// length, or nullptr if `line` is not this command or has no JSON.
+const char* configPayload(const char* line, size_t& length);
+
+// Whether `line` is `keyword` alone, with an optional trailing CR: "JOUR" and
+// "VENTILATION" show their settings.
+bool isShowCommand(const char* line, const char* keyword);
 
 }  // namespace terrarium::control

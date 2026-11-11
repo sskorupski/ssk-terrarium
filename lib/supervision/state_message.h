@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include "air_probes.h"
+#include "day_night.h"
 #include "heat_settings.h"
 #include "mode_machine.h"
 #include "posix_tz.h"
@@ -15,10 +16,10 @@
 
 namespace terrarium::supervision {
 
-// Largest state JSON: four windows, the longest time zone, the longest cause
-// of rejection, both probes, the ventilation and the bounds fit
+// Largest state JSON: four windows, six seasons, the longest time zone, the
+// longest cause of rejection, both probes, the ventilation and the bounds fit
 // (test_longest_state_fits).
-constexpr size_t kStateSize = 1280;
+constexpr size_t kStateSize = 2048;
 
 // One air probe as published in "sondes" (RG-topics-mqtt, cadrage 2026-007).
 struct ProbeState {
@@ -58,7 +59,12 @@ struct StateSnapshot {
   bool timeKnown;                         // NTP answered since boot.
   bool inWindow;                          // Meaningful only when timeKnown.
   control::HeatSettingsBounds bounds;     // Compile-time bounds (RG-reglages-bornes).
+  control::HeatSettings nightHeat;        // "chauffage_nuit" (2026-016).
+  control::DayNight dayNight;             // "jour_nuit" (RG-jour-et-nuit).
+  control::DayWindow today;               // "jour_aujourdhui", when timeKnown.
+  control::Moment moment;                 // "moment".
   control::FanSettings fanSettings;       // "ventilation" (RG-ventilation-periodique).
+  bool saturationRunning;                 // "aeration_saturation".
   control::FanSettingsBounds fanBounds;   // Compile-time bounds (RG-reglages-bornes).
 };
 

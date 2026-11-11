@@ -21,9 +21,33 @@ constexpr char kTimeWindowsKey[] = "plages";
 constexpr char kTimezoneKey[] = "fuseau";
 constexpr char kAirSafetyKey[] = "securite_air";
 constexpr char kProbeSetupKey[] = "sondes";
-// Duration, period and time of day, two little-endian bytes each.
+// Bytes of control::encodeFanSettings and encodeDayNight. A blob of another
+// size, such as 2026-013's six bytes, reads as nothing stored.
 constexpr char kFanKey[] = "ventilation";
-constexpr size_t kFanStoredSize = 6;
+constexpr char kDayNightKey[] = "jour_nuit";
+constexpr char kNightSetpointKey[] = "consigne_nuit";
+constexpr char kNightHysteresisKey[] = "hyst_nuit";
+
+template <size_t N>
+bool loadBlob(const char* key, uint8_t (&out)[N]) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  uint8_t stored[N] = {};
+  const bool found = preferences.isKey(key) && preferences.getBytesLength(key) == N &&
+                     preferences.getBytes(key, stored, N) == N;
+  preferences.end();
+  if (found) std::memcpy(out, stored, N);
+  return found;
+}
+
+template <size_t N>
+bool saveBlob(const char* key, const uint8_t (&stored)[N]) {
+  Preferences preferences;
+  if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
+  const bool written = preferences.putBytes(key, stored, N) == N;
+  preferences.end();
+  return written;
+}
 
 constexpr char kUpdateLicenceKey[] = "licence_maj";
 constexpr char kUpdateAttemptKey[] = "maj_tentee";
@@ -174,32 +198,40 @@ bool SettingsStore::saveTimezone(const char* timezone) {
   return written;
 }
 
-bool SettingsStore::loadFanSettings(control::FanSettings& out) {
+bool SettingsStore::loadFanSettings(uint8_t (&out)[control::kFanStoredSize]) {
+  return loadBlob(kFanKey, out);
+}
+
+bool SettingsStore::saveFanSettings(const uint8_t (&stored)[control::kFanStoredSize]) {
+  return saveBlob(kFanKey, stored);
+}
+
+bool SettingsStore::loadDayNight(uint8_t (&out)[control::kDayNightStoredSize]) {
+  return loadBlob(kDayNightKey, out);
+}
+
+bool SettingsStore::saveDayNight(const uint8_t (&stored)[control::kDayNightStoredSize]) {
+  return saveBlob(kDayNightKey, stored);
+}
+
+bool SettingsStore::loadNightHeat(control::HeatSettings& out) {
   Preferences preferences;
   if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
-  uint8_t stored[kFanStoredSize] = {};
-  const bool found = preferences.isKey(kFanKey) &&
-                     preferences.getBytesLength(kFanKey) == kFanStoredSize &&
-                     preferences.getBytes(kFanKey, stored, sizeof(stored)) == kFanStoredSize;
-  preferences.end();
+  const bool found = preferences.isKey(kNightSetpointKey) && preferences.isKey(kNightHysteresisKey);
   if (found) {
-    out.durationMin = static_cast<uint16_t>(stored[0] | (stored[1] << 8));
-    out.periodMin = static_cast<uint16_t>(stored[2] | (stored[3] << 8));
-    out.dailyMinute = static_cast<uint16_t>(stored[4] | (stored[5] << 8));
+    out.setpointC = preferences.getFloat(kNightSetpointKey);
+    out.hysteresisC = preferences.getFloat(kNightHysteresisKey);
   }
+  preferences.end();
   return found;
 }
 
-bool SettingsStore::saveFanSettings(const control::FanSettings& settings) {
-  const uint8_t stored[kFanStoredSize] = {static_cast<uint8_t>(settings.durationMin & 0xFF),
-                                          static_cast<uint8_t>(settings.durationMin >> 8),
-                                          static_cast<uint8_t>(settings.periodMin & 0xFF),
-                                          static_cast<uint8_t>(settings.periodMin >> 8),
-                                          static_cast<uint8_t>(settings.dailyMinute & 0xFF),
-                                          static_cast<uint8_t>(settings.dailyMinute >> 8)};
+bool SettingsStore::saveNightHeat(const control::HeatSettings& settings) {
   Preferences preferences;
   if (!preferences.begin(kNamespace, /*readOnly=*/false)) return false;
-  const bool written = preferences.putBytes(kFanKey, stored, sizeof(stored)) == sizeof(stored);
+  const bool written =
+      preferences.putFloat(kNightSetpointKey, settings.setpointC) == sizeof(float) &&
+      preferences.putFloat(kNightHysteresisKey, settings.hysteresisC) == sizeof(float);
   preferences.end();
   return written;
 }

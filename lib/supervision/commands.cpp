@@ -19,41 +19,154 @@ constexpr char kAirSensor[] = "air";
 constexpr char kProbesField[] = "sondes";
 constexpr char kCombinationField[] = "combinaison";
 constexpr char kFanField[] = "ventilation";
-constexpr char kFanDurationField[] = "duree";
-constexpr char kFanPeriodField[] = "periode";
-constexpr char kFanTimeField[] = "heure";
+constexpr char kDayNightField[] = "jour_nuit";
+constexpr char kNightHeatField[] = "chauffage_nuit";
 
-// {"duree": minutes, "periode": minutes, "heure": "HH:MM"}, any of them, at
-// least one. Whole minutes only: 5.5, booleans and strings are refused.
-bool parseFan(JsonVariantConst value, control::FanSettingsPatch& out) {
+// A whole number of minutes or percent, 0 to 65535: 5.5, booleans and strings
+// are refused.
+bool readUint(JsonVariantConst value, uint16_t& out) {
+  if (value.is<bool>() || !value.is<uint16_t>()) return false;
+  out = value.as<uint16_t>();
+  return true;
+}
+
+bool readText(JsonVariantConst value, const char*& out) {
+  if (!value.is<const char*>()) return false;
+  out = value.as<const char*>();
+  return out != nullptr;
+}
+
+// A non-empty object whose every key `field` accepts.
+template <typename Field>
+bool forEachField(JsonVariantConst value, Field field) {
   if (!value.is<JsonObjectConst>()) return false;
   const JsonObjectConst object = value.as<JsonObjectConst>();
   if (object.size() == 0) return false;
-  control::FanSettingsPatch patch{};
   for (JsonPairConst pair : object) {
-    const char* key = pair.key().c_str();
-    const JsonVariantConst field = pair.value();
-    if (std::strcmp(key, kFanTimeField) == 0) {
-      const char* text = field.is<const char*>() ? field.as<const char*>() : nullptr;
-      if (text == nullptr || !control::parseClockTime(text, std::strlen(text), patch.dailyMinute)) {
+    if (!field(pair.key().c_str(), pair.value())) return false;
+  }
+  return true;
+}
+
+bool parseRhythm(JsonVariantConst value, control::FanRhythmPatch& out) {
+  return forEachField(value, [&out](const char* key, JsonVariantConst v) {
+    if (std::strcmp(key, "mode") == 0) {
+      const char* text = nullptr;
+      return (out.hasMode = readText(v, text) && control::parseFanMode(text, out.mode));
+    }
+    if (std::strcmp(key, "duree") == 0) return (out.hasDuration = readUint(v, out.durationMin));
+    if (std::strcmp(key, "periode") == 0) return (out.hasPeriod = readUint(v, out.periodMin));
+    if (std::strcmp(key, "ecart") == 0) return (out.hasSpread = readUint(v, out.spreadPercent));
+    return false;
+  });
+}
+
+bool parseHibernation(JsonVariantConst value, control::HibernationPatch& out) {
+  return forEachField(value, [&out](const char* key, JsonVariantConst v) {
+    if (std::strcmp(key, "heure") == 0) {
+      const char* text = nullptr;
+      return (out.hasTime = readText(v, text) &&
+                            control::parseClockTime(text, std::strlen(text), out.dailyMinute));
+    }
+    if (std::strcmp(key, "duree") == 0) return (out.hasDuration = readUint(v, out.durationMin));
+    return false;
+  });
+}
+
+bool parseSaturation(JsonVariantConst value, control::SaturationPatch& out) {
+  return forEachField(value, [&out](const char* key, JsonVariantConst v) {
+    if (std::strcmp(key, "active") == 0) {
+      if (!v.is<bool>()) return false;
+      out.active = v.as<bool>();
+      return (out.hasActive = true);
+    }
+    if (std::strcmp(key, "comportement") == 0) {
+      const char* text = nullptr;
+      return (out.hasBehaviour = readText(v, text) && control::parseBehaviour(text, out.behaviour));
+    }
+    if (std::strcmp(key, "humidite") == 0) {
+      return (out.hasHumidity = readUint(v, out.humidityPercent));
+    }
+    if (std::strcmp(key, "attente") == 0) return (out.hasWait = readUint(v, out.waitMin));
+    if (std::strcmp(key, "duree") == 0) return (out.hasDuration = readUint(v, out.durationMin));
+    if (std::strcmp(key, "pause") == 0) return (out.hasPause = readUint(v, out.pauseMin));
+    return false;
+  });
+}
+
+// {"jour":{...},"nuit":{...},"hibernation":{...},"saturation":{...}}, any of
+// them, each partial and non-empty.
+bool parseFan(JsonVariantConst value, control::FanSettingsPatch& out) {
+  control::FanSettingsPatch patch{};
+  const bool ok = forEachField(value, [&patch](const char* key, JsonVariantConst v) {
+    if (std::strcmp(key, "jour") == 0) return parseRhythm(v, patch.day);
+    if (std::strcmp(key, "nuit") == 0) return parseRhythm(v, patch.night);
+    if (std::strcmp(key, "hibernation") == 0) return parseHibernation(v, patch.hibernation);
+    if (std::strcmp(key, "saturation") == 0) return parseSaturation(v, patch.saturation);
+    return false;
+  });
+  if (ok) out = patch;
+  return ok;
+}
+
+bool parseDayWindowText(JsonVariantConst value, control::DayWindow& out) {
+  const char* text = nullptr;
+  return readText(value, text) && control::parseDayWindow(text, std::strlen(text), out);
+}
+
+// {"mode":"metronome","jour":"HH:MM-HH:MM"} or
+// {"mode":"saisons","saisons":[{"debut":"MM-JJ","jour":"HH:MM-HH:MM"},...]}.
+bool parseDayNight(JsonVariantConst value, control::DayNight& out) {
+  if (!value.is<JsonObjectConst>()) return false;
+  const JsonObjectConst object = value.as<JsonObjectConst>();
+  control::DayNight next{};
+  const char* mode = nullptr;
+  if (object.size() != 2 || !readText(object["mode"], mode) ||
+      !control::parseDayNightMode(mode, next.mode)) {
+    return false;
+  }
+  if (next.mode == control::DayNightMode::kMetronome) {
+    if (!parseDayWindowText(object["jour"], next.fixed)) return false;
+  } else {
+    const JsonVariantConst list = object["saisons"];
+    if (!list.is<JsonArrayConst>() || list.size() > control::kMaxSeasons) return false;
+    for (JsonVariantConst item : list.as<JsonArrayConst>()) {
+      if (!item.is<JsonObjectConst>() || item.as<JsonObjectConst>().size() != 2) return false;
+      control::Season& season = next.seasons[next.seasonCount];
+      const char* start = nullptr;
+      if (!readText(item["debut"], start) ||
+          !control::parseMonthDay(start, std::strlen(start), season.startDay) ||
+          !parseDayWindowText(item["jour"], season.day)) {
         return false;
       }
-      patch.hasDailyMinute = true;
-      continue;
+      ++next.seasonCount;
     }
-    if (field.is<bool>() || !field.is<uint16_t>()) return false;
-    if (std::strcmp(key, kFanDurationField) == 0) {
-      patch.hasDuration = true;
-      patch.durationMin = field.as<uint16_t>();
-    } else if (std::strcmp(key, kFanPeriodField) == 0) {
-      patch.hasPeriod = true;
-      patch.periodMin = field.as<uint16_t>();
-    } else {
-      return false;
-    }
+    control::sortSeasons(next);
   }
-  out = patch;
+  if (!control::isValidDayNight(next)) return false;
+  out = next;
   return true;
+}
+
+bool readFloat(JsonVariantConst value, float& out) {
+  // is<float>() also accepts integers; booleans, strings and null are refused.
+  if (value.is<bool>() || !value.is<float>()) return false;
+  out = value.as<float>();
+  return true;
+}
+
+bool parseNightHeat(JsonVariantConst value, NightHeatPatch& out) {
+  NightHeatPatch patch{};
+  const bool ok = forEachField(value, [&patch](const char* key, JsonVariantConst v) {
+    if (std::strcmp(key, "consigne") == 0)
+      return (patch.hasSetpoint = readFloat(v, patch.setpointC));
+    if (std::strcmp(key, "hysteresis") == 0) {
+      return (patch.hasHysteresis = readFloat(v, patch.hysteresisC));
+    }
+    return false;
+  });
+  if (ok) out = patch;
+  return ok;
 }
 
 // {"sht45": "interieure"|"exterieure", "dht11": ...}, at least one probe.
@@ -174,6 +287,16 @@ ConfigError parseConfigPayload(const uint8_t* payload, size_t length,
       next.hasFan = true;
       continue;
     }
+    if (std::strcmp(key, kDayNightField) == 0) {
+      if (!parseDayNight(field.value(), next.dayNight)) return ConfigError::kBadDayNight;
+      next.hasDayNight = true;
+      continue;
+    }
+    if (std::strcmp(key, kNightHeatField) == 0) {
+      if (!parseNightHeat(field.value(), next.nightHeat)) return ConfigError::kBadNightHeat;
+      next.hasNightHeat = true;
+      continue;
+    }
     float* target = nullptr;
     if (std::strcmp(key, kSetpointField) == 0) {
       target = &next.heat.setpointC;
@@ -215,6 +338,10 @@ const char* describe(ConfigError error) {
       return "combinaison invalide";
     case ConfigError::kBadFan:
       return "ventilation invalide";
+    case ConfigError::kBadDayNight:
+      return "jour_nuit invalide";
+    case ConfigError::kBadNightHeat:
+      return "chauffage_nuit invalide";
   }
   return "commande invalide";
 }
@@ -304,20 +431,25 @@ bool formatProbeSetupEvent(const control::ProbeSetup& setup, SettingOutcome outc
       sizeof(out));
 }
 
-bool formatFanSettingsEvent(const control::FanSettings& settings, SettingOutcome outcome,
-                            char (&out)[kEventSize]) {
+bool formatFieldEvent(const char* field, SettingOutcome outcome, char (&out)[kEventSize]) {
   const char* result = "\"applique\"";
   if (outcome == SettingOutcome::kNotSaved) result = "\"applique_non_enregistre\"";
   if (outcome == SettingOutcome::kInvalidFan) {
     result = "\"refuse\",\"raison\":\"ventilation invalide\"";
   }
-  char time[control::kClockTimeTextLength + 1] = "--:--";
-  control::formatClockTime(settings.dailyMinute, time);
+  return fits(
+      std::snprintf(out, sizeof(out),
+                    "{\"evenement\":\"reglage\",\"champ\":\"%s\",\"resultat\":%s}", field, result),
+      sizeof(out));
+}
+
+bool formatNightHeatEvent(const control::HeatSettings& settings, bool applied,
+                          char (&out)[kEventSize]) {
   return fits(std::snprintf(out, sizeof(out),
-                            "{\"evenement\":\"reglage\",\"ventilation\":{\"duree\":%u,"
-                            "\"periode\":%u,\"heure\":\"%s\"},\"resultat\":%s}",
-                            static_cast<unsigned>(settings.durationMin),
-                            static_cast<unsigned>(settings.periodMin), time, result),
+                            "{\"evenement\":\"reglage\",\"chauffage_nuit\":{\"consigne\":%.1f,"
+                            "\"hysteresis\":%.1f},\"resultat\":%s}",
+                            settings.setpointC, settings.hysteresisC,
+                            applied ? "\"applique\"" : "\"refuse\",\"raison\":\"hors bornes\""),
               sizeof(out));
 }
 

@@ -213,6 +213,25 @@ void test_parses_and_formats_a_day_window() {
   TEST_ASSERT_EQUAL_STRING("06:30-20:59", text);
 }
 
+// RG-mode-au-demarrage: stored as bytes, read back, refused if unknown.
+void test_stored_day_night_round_trip() {
+  const DayNight seasons = fourSeasons();
+  uint8_t bytes[terrarium::control::kDayNightStoredSize];
+  terrarium::control::encodeDayNight(seasons, bytes);
+  DayNight back{};
+  TEST_ASSERT_TRUE(terrarium::control::decodeDayNight(bytes, back));
+  TEST_ASSERT_EQUAL(DayNightMode::kSeasons, back.mode);
+  TEST_ASSERT_EQUAL_UINT8(4, back.seasonCount);
+  TEST_ASSERT_EQUAL_UINT16(day("09-22"), back.seasons[2].startDay);
+  TEST_ASSERT_EQUAL_UINT16(hm(19, 30), back.seasons[2].day.endMinute);
+  terrarium::control::encodeDayNight(metronome(hm(7, 0), hm(20, 0)), bytes);
+  TEST_ASSERT_TRUE(terrarium::control::decodeDayNight(bytes, back));
+  TEST_ASSERT_EQUAL(DayNightMode::kMetronome, back.mode);
+  TEST_ASSERT_EQUAL_UINT16(hm(7, 0), back.fixed.startMinute);
+  bytes[0] = 42;
+  TEST_ASSERT_FALSE(terrarium::control::decodeDayNight(bytes, back));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_parses_a_month_and_day);
@@ -232,5 +251,6 @@ int main() {
   RUN_TEST(test_every_interpolated_day_is_valid);
   RUN_TEST(test_moment_of_the_day);
   RUN_TEST(test_parses_and_formats_a_day_window);
+  RUN_TEST(test_stored_day_night_round_trip);
   return UNITY_END();
 }

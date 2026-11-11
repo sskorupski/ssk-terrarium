@@ -52,6 +52,16 @@ constexpr uint8_t kLightOffHour = 21;
 constexpr uint16_t kFanDurationMin = 5;
 constexpr uint16_t kFanPeriodMin = 60;
 constexpr uint16_t kFanDailyMinute = 13 * 60;
+// Rubato spread, and the saturation option, inactive by default
+// (RG-ventilation-periodique, cadrage 2026-015).
+constexpr uint16_t kFanSpreadPercent = 30;
+constexpr uint16_t kSaturationHumidityPercent = 95;
+constexpr uint16_t kSaturationWaitMin = 10;
+constexpr uint16_t kSaturationDurationMin = 5;
+constexpr uint16_t kSaturationPauseMin = 60;
+// Day by default (RG-jour-et-nuit): 08:00-21:00, as the light schedule (F5).
+constexpr uint16_t kDayStartMinute = 8 * 60;
+constexpr uint16_t kDayEndMinute = 21 * 60;
 
 // --- HIBERNATION mode: frost protection only (cadrage, modes table) ----------
 
@@ -99,6 +109,16 @@ constexpr uint16_t kFanDurationMinMin = 1;
 constexpr uint16_t kFanDurationMaxMin = 30;
 constexpr uint16_t kFanPeriodMinMin = 15;
 constexpr uint16_t kFanPeriodMaxMin = 240;
+// Rubato spread and the saturation option (cadrage 2026-015), in percent and
+// minutes; the saturation duration takes the bounds of the fan duration.
+constexpr uint16_t kFanSpreadMinPercent = 10;
+constexpr uint16_t kFanSpreadMaxPercent = 50;
+constexpr uint16_t kSaturationHumidityMinPercent = 80;
+constexpr uint16_t kSaturationHumidityMaxPercent = 100;
+constexpr uint16_t kSaturationWaitMinMin = 1;
+constexpr uint16_t kSaturationWaitMaxMin = 60;
+constexpr uint16_t kSaturationPauseMinMin = 15;
+constexpr uint16_t kSaturationPauseMaxMin = 240;
 // The daily HIBERNATION airing: never two within 12 hours, and every 24 hours
 // while the time is unknown (RG-ventilation-periodique). Not settings.
 constexpr uint32_t kFanDailyMinGapMs = 12UL * 60UL * 60UL * 1000UL;

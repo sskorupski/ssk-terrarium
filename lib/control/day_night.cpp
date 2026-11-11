@@ -153,6 +153,61 @@ Moment momentAt(const DayNight& settings, bool timeKnown, uint16_t day, uint16_t
                                                                              : Moment::kNight;
 }
 
+namespace {
+
+constexpr uint8_t kDayNightLayout = 1;
+
+void put16(uint8_t*& p, uint16_t v) {
+  *p++ = static_cast<uint8_t>(v & 0xFF);
+  *p++ = static_cast<uint8_t>(v >> 8);
+}
+
+uint16_t get16(const uint8_t*& p) {
+  const uint16_t v = static_cast<uint16_t>(p[0] | (p[1] << 8));
+  p += 2;
+  return v;
+}
+
+}  // namespace
+
+void encodeDayNight(const DayNight& s, uint8_t (&out)[kDayNightStoredSize]) {
+  uint8_t* p = out;
+  *p++ = kDayNightLayout;
+  *p++ = static_cast<uint8_t>(s.mode);
+  *p++ = 0;  // Reserved.
+  put16(p, s.fixed.startMinute);
+  put16(p, s.fixed.endMinute);
+  const uint8_t count = s.seasonCount <= kMaxSeasons ? s.seasonCount : kMaxSeasons;
+  *p++ = count;
+  for (size_t i = 0; i < kMaxSeasons; ++i) {
+    const Season season = i < count ? s.seasons[i] : Season{0, {0, 0}};
+    put16(p, season.startDay);
+    put16(p, season.day.startMinute);
+    put16(p, season.day.endMinute);
+  }
+}
+
+bool decodeDayNight(const uint8_t (&in)[kDayNightStoredSize], DayNight& out) {
+  const uint8_t* p = in;
+  if (*p++ != kDayNightLayout) return false;
+  const uint8_t mode = *p++;
+  ++p;
+  if (mode > static_cast<uint8_t>(DayNightMode::kSeasons)) return false;
+  DayNight s{};
+  s.mode = static_cast<DayNightMode>(mode);
+  s.fixed.startMinute = get16(p);
+  s.fixed.endMinute = get16(p);
+  s.seasonCount = *p++;
+  if (s.seasonCount > kMaxSeasons) return false;
+  for (size_t i = 0; i < kMaxSeasons; ++i) {
+    s.seasons[i].startDay = get16(p);
+    s.seasons[i].day.startMinute = get16(p);
+    s.seasons[i].day.endMinute = get16(p);
+  }
+  out = s;
+  return true;
+}
+
 const char* momentName(Moment moment) { return moment == Moment::kNight ? "nuit" : "jour"; }
 
 const char* dayNightModeName(DayNightMode mode) {

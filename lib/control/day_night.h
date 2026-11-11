@@ -71,6 +71,13 @@ DayWindow dayFor(const DayNight& settings, uint16_t day);
 // Day or night at `minuteOfDay` of `day`; day while the time is unknown.
 Moment momentAt(const DayNight& settings, bool timeKnown, uint16_t day, uint16_t minuteOfDay);
 
+// NVS form (RG-mode-au-demarrage): a layout version, the mode, the fixed day,
+// then the seasons, little-endian. decodeDayNight returns false on another
+// version or an unknown mode; the caller then checks validity.
+constexpr size_t kDayNightStoredSize = 3 + 4 + 1 + kMaxSeasons * 6;
+void encodeDayNight(const DayNight& settings, uint8_t (&out)[kDayNightStoredSize]);
+bool decodeDayNight(const uint8_t (&in)[kDayNightStoredSize], DayNight& out);
+
 const char* momentName(Moment moment);            // "jour", "nuit".
 const char* dayNightModeName(DayNightMode mode);  // "metronome", "saisons".
 bool parseDayNightMode(const char* text, DayNightMode& out);
