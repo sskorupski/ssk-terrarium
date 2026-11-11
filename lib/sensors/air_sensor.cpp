@@ -29,4 +29,11 @@ AirReading AirSensor::read() {
   return {temperatureC, humidityRhPercent, true};
 }
 
+bool AirSensor::heat() {
+  float discardedTemperatureC = 0.0f;
+  float discardedHumidityRhPercent = 0.0f;
+  return sht_.activateHighestHeaterPowerLong(discardedTemperatureC, discardedHumidityRhPercent) ==
+         kNoError;
+}
+
 }  // namespace terrarium::sensors

@@ -24,6 +24,7 @@
 #include "mode_machine.h"
 #include "outputs.h"
 #include "posix_tz.h"
+#include "probe_heater.h"
 #include "sensor_watch.h"
 #include "serial_command.h"
 #include "settings_store.h"
@@ -44,6 +45,7 @@ using terrarium::control::AirRejection;
 using terrarium::control::AirSource;
 using terrarium::control::HeatGuard;
 using terrarium::control::HeatingPolicy;
+using terrarium::control::HeatReason;
 using terrarium::control::HeatSettings;
 using terrarium::control::HysteresisRegulator;
 using terrarium::control::kProbeCount;
@@ -93,6 +95,9 @@ AirMeasure airMeasure{AirSource::kNone, 0.0f, 0.0f, AirRejection::kNone, AirReje
 // The owner keeps the interior air's safety on, unless told otherwise over
 // MQTT and saved in NVS (RG-capteur-en-defaut, INV-2).
 bool airSafety = true;
+// Heats the SHT45 out of condensation (RG-chauffe-de-la-sht45).
+terrarium::control::ProbeHeater sht45Heater(cfg::kProbeHeatMinRhPercent,
+                                            cfg::kProbeHeatMinIntervalMs);
 HeatGuard heatGuard(cfg::kHeatContinuousMaxMs, cfg::kHeatPauseMs);
 terrarium::control::SubstrateCap substrateCap(cfg::kSubstrateCutAtC, cfg::kSubstrateResumeBelowC,
                                               cfg::kSensorSilentMaxMs);
@@ -287,6 +292,24 @@ SensorHealth measureAir(uint32_t nowMs) {
     Serial.println(health == SensorHealth::kFault ? "DEFAUT capteur air" : "REPRISE capteur air");
   }
   return health;
+}
+
+// Heats the SHT45 out of condensation right after its reading, so between two
+// readings (RG-chauffe-de-la-sht45): nothing is read during the pulse, the
+// reading it returns is thrown away, and the next one comes at the usual time,
+// once the chip has cooled. The outputs keep what the last reading decided.
+void heatAirSensorIfDue(const terrarium::sensors::AirReading& reading, uint32_t nowMs) {
+  const ProbeSample& sample = probeSamples[static_cast<uint8_t>(Probe::kSht45)];
+  const HeatReason reason = sht45Heater.due(nowMs, sample.rejection, sample.humidityRhPercent);
+  if (reason == HeatReason::kNone) return;
+  esp_task_wdt_reset();
+  if (!airSensor.heat()) {
+    Serial.println("ERREUR chauffe sonde sht45 refusee");
+    return;
+  }
+  Serial.printf("CHAUFFE sonde sht45 : humidite %.1f %%\r\n", reading.humidityRhPercent);
+  char event[terrarium::supervision::kEventSize];
+  if (terrarium::supervision::formatProbeHeatingEvent(reason, event)) supervisor.sendEvent(event);
 }
 
 // One regulation step. Misting, light and fan stay off in phase 1
@@ -843,6 +866,7 @@ void loop() {
     regulate(air, substrate, nowMs);
     reportMeasures(substrate);
     publishState(substrate, nowMs);
+    heatAirSensorIfDue(air[static_cast<uint8_t>(Probe::kSht45)], nowMs);
   }
 
   pollTimeSync();

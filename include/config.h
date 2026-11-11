@@ -102,6 +102,21 @@ constexpr float kAlertRhHighPercent = 95.0f;
 constexpr uint32_t kSensorPeriodMs = 30UL * 1000UL;  // Cadrage F1.
 constexpr uint32_t kWatchdogTimeoutMs = 10UL * 1000UL;
 
+// --- SHT45 heater (RG-chauffe-de-la-sht45) -------------------------------------
+// Right after a reading at or above this humidity, or rejected for its
+// humidity, the SHT45 heats 1 s at 200 mW, at most once per interval. Not a
+// setting (INV-5).
+
+constexpr float kProbeHeatMinRhPercent = 95.0f;
+constexpr uint32_t kProbeHeatMinIntervalMs = 5UL * 60UL * 1000UL;
+// Fixed by the sensor's command; it blocks the loop, plus ~10 ms of measure.
+constexpr uint32_t kProbeHeatPulseMs = 1000UL;
+
+static_assert(kProbeHeatPulseMs * 10UL <= kProbeHeatMinIntervalMs,
+              "Sensirion caps the heater at a 10 % duty cycle");
+static_assert(kProbeHeatPulseMs * 2UL < kWatchdogTimeoutMs, "heating would trip the watchdog");
+static_assert(kProbeHeatPulseMs < kSensorPeriodMs, "the chip must cool before the next reading");
+
 static_assert(kHeatHysteresisC > 0.0f, "hysteresis must be positive");
 static_assert(kFrostHeatOnBelowC < kFrostHeatOffAtC, "frost band must not be empty");
 static_assert(kMistPulseMs <= kMistPulseMaxMs, "default pulse exceeds the safety limit");

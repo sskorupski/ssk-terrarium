@@ -233,6 +233,16 @@ bool formatSafetyEvent(bool airSafety, char (&out)[kEventSize], bool saved) {
       sizeof(out));
 }
 
+bool formatProbeHeatingEvent(control::HeatReason reason, char (&out)[kEventSize]) {
+  const char* name = control::heatReasonName(reason);
+  if (name == nullptr) return false;
+  return fits(std::snprintf(out, sizeof(out),
+                            "{\"evenement\":\"chauffe-sonde\",\"sonde\":\"sht45\","
+                            "\"motif\":\"%s\"}",
+                            name),
+              sizeof(out));
+}
+
 bool formatProbeSetupEvent(const control::ProbeSetup& setup, SettingOutcome outcome,
                            char (&out)[kEventSize]) {
   const char* result = "\"applique\"";
