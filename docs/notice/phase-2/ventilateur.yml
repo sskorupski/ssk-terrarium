@@ -1,0 +1,42 @@
+# Phase 2 wiring: the 5 V fan switched by relay 4 (step 4). Source of
+# ventilateur.svg: regenerate with outils/schemas.sh after any change.
+metadata:
+  title: Phase 2 — Ventilateur 5 V sur le relais 4
+
+connectors:
+  LM2596:
+    type: (H) Abaisseur 5 V (LM2596)
+    subtype: fils de l'étape 4 de la phase 1 laissés en place
+    pinlabels: [VOUT+, VOUT−]
+  RELAIS4:
+    type: (E) Relais 4 du module (ventilateur, K4)
+    pinlabels: [COM, "NO", NC (libre)]
+  VENTILATEUR:
+    type: (X) Ventilateur 80 mm 5 V
+    subtype: fiche 1,25 mm, prolongée par la rallonge (Y)
+    pinlabels: [+ (fil rouge), − (fil noir)]
+
+cables:
+  W1:
+    wirecount: 1
+    colors: [RD]
+    type: (M) Fil souple
+  W2:
+    wirecount: 1
+    colors: [RD]
+    type: (Y) Rallonge, fil rouge
+  W3:
+    wirecount: 1
+    colors: [BK]
+    type: (Y) Rallonge, fil noir
+
+connections:
+  - - LM2596: [1]
+    - W1: [1]
+    - RELAIS4: [1]
+  - - RELAIS4: [2]
+    - W2: [1]
+    - VENTILATEUR: [1]
+  - - LM2596: [2]
+    - W3: [1]
+    - VENTILATEUR: [2]
