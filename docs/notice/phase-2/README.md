@@ -28,7 +28,7 @@ Outils et accessoires, sans repère :
 
 - le multimètre de la phase 1, en testeur de continuité et en voltmètre continu ;
 - une grille fine, de la moustiquaire par exemple, pour que les escargots n'atteignent pas les pales, et de quoi fixer le ventilateur au couvercle (vis, colliers) ;
-- le firmware : le fichier `.bin` de la version `phase-2`, sur sa page [Releases](https://github.com/sskorupski/ssk-terrarium/releases). Tant que le tag n'est pas posé, celui de `main`, compilé et téléversé par `pio run -e esp32dev -t upload` ([developpement.md](../../developpement.md)).
+- le firmware : le fichier `.bin` de la version `phase-2`, sur sa page [Releases](https://github.com/sskorupski/ssk-terrarium/releases). Tant que le tag n'est pas posé, celui de `main`, compilé et téléversé par `pio run -e esp32dev -t upload` ([developpement.md](../../developpement.md)) ; ce téléversement-là garde les réglages enregistrés, mode et Wi-Fi compris, à l'inverse de l'image `.bin`.
 
 ## Étape 1 — Téléverser le firmware de la phase 2
 
@@ -44,12 +44,15 @@ Parmi ses lignes de démarrage, la carte ESP32 écrit :
 ```
 MODE MAINTENANCE au demarrage
 …
-VENTILATION duree=5min periode=60min heure=13:00 au demarrage
+VENTILATION jour metronome duree=5min periode=60min ecart=30%
+VENTILATION nuit metronome duree=5min periode=60min ecart=30%
+VENTILATION hibernation heure=13:00 duree=5min
+VENTILATION saturation inactive aeration humidite=95% attente=10min duree=5min pause=60min au demarrage
 …
 === pret : regulation en cours ===
 ```
 
-`VENTILATION` donne les réglages du ventilateur : 5 minutes d'aération toutes les 60 minutes, et l'aération quotidienne de l'hibernation à 13:00. Comme à la phase 1, le téléversement efface le mode enregistré : la carte repart en `MAINTENANCE`, où le ventilateur reste coupé. Les réglages de la phase 1 sont effacés de même, Wi-Fi compris : on les refera à l'étape 6.
+Les lignes `VENTILATION` donnent les réglages du ventilateur : de jour comme de nuit, 5 minutes d'aération toutes les 60 minutes ; l'aération quotidienne de l'hibernation à 13:00 ; l'option saturation inactive ([ventilation.md](../../ventilation.md)). Comme à la phase 1, le téléversement efface le mode enregistré : la carte repart en `MAINTENANCE`, où le ventilateur reste coupé. Les réglages de la phase 1 sont effacés de même, Wi-Fi compris : on les refera à l'étape 6.
 
 Débrancher l'USB.
 
@@ -61,11 +64,11 @@ Débrancher l'USB.
 
 1. Cordon secteur (**N**) et bloc 12 V (**F**) débranchés, ouvrir le boîtier (**T**). **Repérer les vis du relais 4** comme celles du relais 1 à l'étape 4 de la phase 1 : sur le bord du module, les trois vis à côté du nom `K4`. Celle du milieu est **COM**. Multimètre en testeur de continuité, une pointe sur COM, l'autre sur chaque vis extérieure : celle qui sonne, relais relâché, est **NC** ; l'autre est **NO**. Marquer la vis **NO** au feutre.
 2. Brancher la carte ESP32 par l'USB, puis le bloc 12 V sur la prise murale ; le cordon secteur reste débranché. Ouvrir le terminal série. Aucun relais ne s'enclenche.
-3. Taper `VENTILATION DUREE 1` puis **Entrée** : la carte répond `VENTILATION duree=1min periode=60min heure=13:00 enregistree, conservee apres coupure`. Une minute d'aération suffit pour l'essai.
+3. Taper `CONFIG {"ventilation":{"jour":{"duree":1},"nuit":{"duree":1}}}` puis **Entrée** : la carte répond par les lignes `VENTILATION`, `jour` et `nuit` à `duree=1min`, la dernière finissant par `: enregistree`. Une minute d'aération suffit pour l'essai ; le jour et la nuit sont réglés ensemble, pour ne pas dépendre de l'heure qu'il est.
 4. Taper `MODE ACTIF` puis **Entrée**. Un changement de mode commence par une aération : à la mesure suivante, dans les 30 secondes, **le relais 4 s'enclenche** et la carte écrit `VENTILATION marche`.
 5. Environ une minute plus tard, le relais 4 se relâche, et la carte écrit `VENTILATION arret`.
 6. Taper `MODE ACTIF` une seconde fois : la carte répond `MODE ACTIF deja actif`, et rien ne se passe. Taper `MODE HIBERNATION`, puis aussitôt `MODE ACTIF` : le changement de mode relance une aération, `VENTILATION marche`. Taper alors `MODE MAINTENANCE` : dans les 30 secondes, le relais 4 se relâche et la carte écrit `VENTILATION arret`.
-7. Taper `VENTILATION DUREE 5` pour revenir aux 5 minutes, puis débrancher le bloc 12 V et l'USB.
+7. Taper `CONFIG {"ventilation":{"jour":{"duree":5},"nuit":{"duree":5}}}` pour revenir aux 5 minutes, puis débrancher le bloc 12 V et l'USB.
 
 **Le résultat attendu** : le relais 4 ne s'enclenche qu'avec `VENTILATION marche`, et se relâche avec `VENTILATION arret`. Un relais 4 qui s'enclenche à un autre moment, ou un autre relais qui s'enclenche avec lui : s'arrêter là, et vérifier le fil de `IN4` (étape 5 de la phase 1).
 
@@ -104,7 +107,7 @@ Le ventilateur tire 0,18 A sous 5 V. L'abaisseur, qui débite environ 0,3 A pour
 3. Pendant qu'il tourne, l'afficheur de l'abaisseur (**H**), basculé sur sa tension de sortie, indique toujours 5,0 V environ. Noter la valeur.
 4. Cinq minutes plus tard, `VENTILATION arret` : le ventilateur s'arrête. Le suivant tournera une heure après le premier.
 5. Taper `MODE MAINTENANCE` pendant une aération : le ventilateur s'arrête dans les 30 secondes.
-6. **Hibernation** : taper `MODE HIBERNATION`. Le ventilateur ne tourne pas à l'entrée dans le mode : il tournera une fois par jour, à 13:00 si la carte connaît l'heure, sinon 24 heures après l'entrée dans le mode. Pour le voir sans attendre, une fois le Wi-Fi configuré et l'heure connue (`PLAGES` l'affiche), taper `VENTILATION HEURE` suivi de l'heure qu'il est, par exemple `VENTILATION HEURE 15:42` : le ventilateur tourne à la mesure suivante. Remettre ensuite `VENTILATION HEURE 13:00`.
+6. **Hibernation** : taper `MODE HIBERNATION`. Le ventilateur ne tourne pas à l'entrée dans le mode : il tournera une fois par jour, à 13:00 si la carte connaît l'heure, sinon 24 heures après l'entrée dans le mode. Pour le voir sans attendre, une fois le Wi-Fi configuré et l'heure connue (`PLAGES` l'affiche), taper l'heure qu'il est dans `CONFIG {"ventilation":{"hibernation":{"heure":"15:42"}}}` : le ventilateur tourne à la mesure suivante. Remettre ensuite `CONFIG {"ventilation":{"hibernation":{"heure":"13:00"}}}`.
 
 ## Étape 6 — Remettre en service
 
@@ -112,10 +115,10 @@ Le ventilateur tire 0,18 A sous 5 V. L'abaisseur, qui débite environ 0,3 A pour
 
 1. Débrancher le bloc 12 V et l'USB, refermer le boîtier (**T**), puis rebrancher le cordon secteur (**N**) et le bloc 12 V.
 2. Taper le mode voulu, `MODE ACTIF` pour l'élevage ou `MODE HIBERNATION` pour la mise au repos. Si le Wi-Fi servait, le reconfigurer ([supervision.md](../../supervision.md)) ; refaire de même les plages et le fuseau du mode `PLAGES` s'ils avaient été changés ([mode-plages.md](../../mode-plages.md)).
-3. Taper `VENTILATION` : la carte répond `VENTILATION duree=5min periode=60min heure=13:00 actuelle`, ou les réglages choisis.
+3. Taper `VENTILATION` : la carte répond par ses quatre lignes de réglages, la dernière finissant par `actuelle`.
 
 ## Fin de la ventilation
 
 La ventilation est montée quand les six étapes donnent ce qu'elles annoncent. Reporter dans le cadrage [ssk-terrarium-cadrage#2026-013](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-013) la tension de l'abaisseur mesurée à l'étape 5 avec le ventilateur en marche.
 
-Les valeurs de 5 minutes par heure restent à éprouver : les lignes `MESURE` montrent l'humidité du bac avant et après chaque aération. Une humidité qui chute trop appelle une aération plus courte ou plus rare ; un air qui reste saturé, l'inverse. Les réglages se changent sans rien rebrancher, par `VENTILATION DUREE`, `VENTILATION PERIODE` et `VENTILATION HEURE`, ou à distance ([ventilation.md](../../ventilation.md)), dans les bornes du firmware : 1 à 30 minutes toutes les 15 à 240 minutes.
+Les valeurs de 5 minutes par heure restent à éprouver : les lignes `MESURE` montrent l'humidité du bac avant et après chaque aération. Une humidité qui chute trop appelle une aération plus courte ou plus rare ; un air qui reste saturé, l'inverse. Les réglages se changent sans rien rebrancher, par `CONFIG` sur la liaison série ou à distance : durée et période de jour et de nuit, mode `rubato` pour une ventilation moins régulière, jour et nuit au fil des saisons, option saturation ([ventilation.md](../../ventilation.md)), dans les bornes du firmware.
