@@ -76,6 +76,7 @@ using terrarium::control::SensorHealth;
 using terrarium::control::SensorWatch;
 using terrarium::control::SettingCommand;
 using terrarium::control::SubstrateCapChange;
+using terrarium::control::SubstrateSettings;
 using terrarium::control::TimeWindows;
 
 namespace {
@@ -117,8 +118,25 @@ bool airSafety = true;
 terrarium::control::ProbeHeater sht45Heater(cfg::kProbeHeatMinRhPercent,
                                             cfg::kProbeHeatMinIntervalMs);
 HeatGuard heatGuard(cfg::kHeatContinuousMaxMs, cfg::kHeatPauseMs);
-terrarium::control::SubstrateCap substrateCap(cfg::kSubstrateCutAtC, cfg::kSubstrateResumeBelowC,
-                                              cfg::kSensorSilentMaxMs);
+// The substrate cut (RG-coupure-par-le-substrat, 2026-018): settings within
+// compile-time bounds (RG-reglages-bornes), active by default.
+terrarium::control::SubstrateCap substrateCap(cfg::kSubstrateHoldAirFloorC,
+                                              cfg::kSubstrateApproachSliceMs);
+constexpr terrarium::control::SubstrateSettingsBounds kSubstrateBounds{
+    cfg::kSubstrateCutMinTenths,      cfg::kSubstrateCutMaxTenths,
+    cfg::kSubstrateResumeMinTenths,   cfg::kSubstrateGapMinTenths,
+    cfg::kSubstrateApproachMinTenths, cfg::kSubstrateApproachMaxTenths,
+    cfg::kSubstrateSilentDelayMinMin, cfg::kSubstrateSilentDelayMaxMin};
+constexpr SubstrateSettings kDefaultSubstrateSettings{
+    true,
+    cfg::kSubstrateApproachTenths,
+    {cfg::kSubstrateCutAtTenths, cfg::kSubstrateResumeBelowTenths},
+    {cfg::kSubstrateCutAtTenths, cfg::kSubstrateResumeBelowTenths},
+    terrarium::control::SilentProbeBehaviour::kResumeOnAir,
+    cfg::kSubstrateSilentDelayMin};
+SubstrateSettings substrateSettings = kDefaultSubstrateSettings;
+// The approach part last announced on the serial link, to report changes only.
+int8_t lastSubstratePart = terrarium::control::kNoSubstratePart;
 // Bounds of the settings received from the network (RG-reglages-bornes).
 constexpr terrarium::control::HeatSettingsBounds kHeatBounds{
     cfg::kSetpointMinC, cfg::kSetpointMaxC, cfg::kHeatHysteresisMinC, cfg::kHeatHysteresisMaxC,
@@ -418,8 +436,11 @@ void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
       break;
   }
 
-  // Before the guard: a cut heater does not count as continuous heating.
-  switch (substrateCap.update(nowMs, substrate.valid, substrate.temperatureC)) {
+  // Before the guard: a cut heater, or one stopped within an approach slice,
+  // does not count as continuous heating.
+  const bool airValid = airMeasure.source != AirSource::kNone;
+  switch (substrateCap.update(nowMs, substrateSettings, moment, substrate.valid,
+                              substrate.temperatureC, airValid, airTemperatureC)) {
     case SubstrateCapChange::kCut:
       Serial.printf("COUPURE chauffage : substrat a %.1f C\r\n", substrate.temperatureC);
       break;
@@ -429,10 +450,24 @@ void regulate(const terrarium::sensors::AirReading (&readings)[kProbeCount],
     case SubstrateCapChange::kResumedSilent:
       Serial.println("REPRISE chauffage : sonde substrat muette");
       break;
+    case SubstrateCapChange::kResumedFrost:
+      Serial.printf("REPRISE chauffage : sonde substrat muette, air a %.1f C sous %.1f C\r\n",
+                    airTemperatureC, cfg::kSubstrateHoldAirFloorC);
+      break;
+    case SubstrateCapChange::kResumedDisabled:
+      Serial.println("REPRISE chauffage : coupure par le substrat desactivee");
+      break;
     case SubstrateCapChange::kNone:
       break;
   }
-  if (substrateCap.cut()) next.heater = false;
+  next.heater = substrateCap.filter(nowMs, next.heater);
+  const int8_t part = substrateCap.partTenths();
+  if (part != lastSubstratePart && part > 0 && part < 10) {
+    Serial.printf("APPROCHE substrat : chauffe %d min sur 10\r\n", part);
+  } else if (lastSubstratePart > 0 && lastSubstratePart < 10 && part == 10) {
+    Serial.println("APPROCHE substrat : sortie de la zone");
+  }
+  lastSubstratePart = part;
 
   const bool wasPaused = heatGuard.paused();
   next.heater = heatGuard.filter(nowMs, next.heater);
@@ -563,6 +598,9 @@ void publishState(const terrarium::sensors::SubstrateReading& substrate, uint32_
   snapshot.fanSettings = fanSettings;
   snapshot.saturationRunning = saturationVent.running();
   snapshot.fanBounds = kFanBounds;
+  snapshot.substrateSettings = substrateSettings;
+  snapshot.substratePartTenths = substrateCap.partTenths();
+  snapshot.substrateBounds = kSubstrateBounds;
   supervisor.publish(snapshot);
 }
 
@@ -772,6 +810,40 @@ void applyDayNight(const DayNight& next) {
   sendFieldEvent("jour_nuit", saved ? SettingOutcome::kApplied : SettingOutcome::kNotSaved);
 }
 
+// The substrate cut on one line (RG-coupure-par-le-substrat).
+void printSubstrateSettings(const char* suffix) {
+  const SubstrateSettings& s = substrateSettings;
+  Serial.printf(
+      "SUBSTRAT coupure %s, jour %.1f/%.1fC, nuit %.1f/%.1fC, approche %.1fC, sonde muette %s "
+      "%umin%s\r\n",
+      s.active ? "active" : "DESACTIVEE", s.day.cutTenths / 10.0, s.day.resumeTenths / 10.0,
+      s.night.cutTenths / 10.0, s.night.resumeTenths / 10.0, s.approachTenths / 10.0,
+      terrarium::control::silentProbeBehaviourName(s.silentBehaviour), unsigned{s.silentDelayMin},
+      suffix);
+}
+
+// Replaces the substrate cut settings (already within bounds), saves and
+// reports them; an activation or a deactivation is also announced on its own
+// (RG-topics-mqtt). They apply from the next measurement.
+void applySubstrateSettings(const SubstrateSettings& next) {
+  using terrarium::supervision::SettingOutcome;
+  const bool wasActive = substrateSettings.active;
+  substrateSettings = next;
+  uint8_t stored[terrarium::control::kSubstrateStoredSize];
+  terrarium::control::encodeSubstrateSettings(substrateSettings, stored);
+  const bool saved = settingsStore.saveSubstrateSettings(stored);
+  printSubstrateSettings(saved ? " : enregistree" : " : appliquee mais non enregistree");
+  sendFieldEvent("securite_substrat", saved ? SettingOutcome::kApplied : SettingOutcome::kNotSaved);
+  if (substrateSettings.active != wasActive) {
+    Serial.println(substrateSettings.active ? "SECURITE coupure par le substrat activee"
+                                            : "ATTENTION coupure par le substrat DESACTIVEE");
+    char event[terrarium::supervision::kEventSize];
+    if (terrarium::supervision::formatSubstrateSafetyEvent(substrateSettings.active, event)) {
+      supervisor.sendEvent(event);
+    }
+  }
+}
+
 // Replaces the night setpoint (already within bounds), saves and reports it.
 void applyNightHeat(const HeatSettings& next) {
   nightHeat = next;
@@ -789,8 +861,8 @@ void applyNightHeat(const HeatSettings& next) {
 }
 
 // A cmd/config, or CONFIG on the serial link: refused whole if it would leave
-// no interior probe, or if its ventilation, night or day heat part is out of
-// bounds (RG-reglages-bornes); windows, time zone and day and night were
+// no interior probe, or if its ventilation, night or day heat, or substrate
+// cut part is out of bounds (RG-reglages-bornes); windows, time zone and day and night were
 // validated by the parser.
 void applyConfig(const terrarium::supervision::ConfigCommand& config) {
   const bool hasProbes = config.hasRole[0] || config.hasRole[1] || config.hasCombination;
@@ -826,6 +898,15 @@ void applyConfig(const terrarium::supervision::ConfigCommand& config) {
     }
     return;
   }
+  const SubstrateSettings nextSubstrate =
+      terrarium::control::merged(substrateSettings, config.substrate);
+  if (config.hasSubstrate &&
+      !terrarium::control::isAcceptedSubstrateSettings(nextSubstrate, kSubstrateBounds)) {
+    Serial.println(
+        "REFUS securite_substrat : hors bornes, ou une reprise a moins de 2.0C sous sa coupure");
+    sendFieldEvent("securite_substrat", terrarium::supervision::SettingOutcome::kInvalidSubstrate);
+    return;
+  }
   if (config.hasHeat) {
     const bool accepted = terrarium::control::isAcceptedHeatSettings(config.heat, kHeatBounds);
     applyHeatSettings(config.heat);  // Applies it, or reports the refusal.
@@ -838,6 +919,7 @@ void applyConfig(const terrarium::supervision::ConfigCommand& config) {
   if (config.hasFan) applyFanSettings(nextFan);
   if (config.hasDayNight) applyDayNight(config.dayNight);
   if (config.hasNightHeat) applyNightHeat(nextNight);
+  if (config.hasSubstrate) applySubstrateSettings(nextSubstrate);
 }
 
 // Commands received over MQTT, applied here, in the regulation loop.
@@ -960,6 +1042,10 @@ bool handleSettingsLine(const char* line) {
     printDayNight(" actuel");
     return true;
   }
+  if (terrarium::control::isShowCommand(line, "SUBSTRAT")) {
+    printSubstrateSettings(" actuelle");
+    return true;
+  }
   size_t length = 0;
   const char* json = terrarium::control::configPayload(line, length);
   if (json == nullptr) return false;
@@ -1009,6 +1095,25 @@ void restoreFanSettings() {
   }
   Serial.printf("CONSIGNE nuit %.1fC hysteresis %.1fC au demarrage\r\n", nightHeat.setpointC,
                 nightHeat.hysteresisC);
+}
+
+// Restores the saved substrate cut if readable and within the bounds of this
+// firmware; otherwise it stays active on its original thresholds, never
+// disabled (RG-mode-au-demarrage).
+void restoreSubstrateSettings() {
+  uint8_t stored[terrarium::control::kSubstrateStoredSize];
+  SubstrateSettings decoded{};
+  if (settingsStore.loadSubstrateSettings(stored)) {
+    if (terrarium::control::decodeSubstrateSettings(stored, decoded) &&
+        terrarium::control::isAcceptedSubstrateSettings(decoded, kSubstrateBounds)) {
+      substrateSettings = decoded;
+    } else {
+      Serial.println(
+          "INFO coupure par le substrat enregistree illisible ou hors bornes, valeurs du firmware");
+    }
+  }
+  printSubstrateSettings(" au demarrage");
+  if (!substrateSettings.active) Serial.println("ATTENTION coupure par le substrat DESACTIVEE");
 }
 
 // Restores the saved roles and combination if valid, else the firmware's
@@ -1077,7 +1182,8 @@ void handleSerialLine(const char* line) {
   if (!terrarium::control::parseModeCommand(line, target)) {
     Serial.println(
         "ERREUR commande inconnue (MODE ACTIF|PLAGES|HIBERNATION|MAINTENANCE, PLAGES, FUSEAU, "
-        "SONDES, SONDE, COMBINAISON, VENTILATION, JOUR, CONFIG <json>, WIFI CONFIGURER, LICENCE)");
+        "SONDES, SONDE, COMBINAISON, VENTILATION, JOUR, SUBSTRAT, CONFIG <json>, WIFI CONFIGURER, "
+        "LICENCE)");
     return;
   }
   applyMode(target);
@@ -1148,6 +1254,7 @@ void setup() {
   restoreProbeSetup();
   restoreSchedule();
   restoreFanSettings();
+  restoreSubstrateSettings();
   // Periods count from the boot: the first one begins with an airing.
   fanScheduler.restart(millis());
 

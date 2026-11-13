@@ -35,6 +35,19 @@ constexpr terrarium::control::FanSettingsBounds kFanBounds{cfg::kFanDurationMinM
                                                            cfg::kSaturationPauseMinMin,
                                                            cfg::kSaturationPauseMaxMin};
 
+constexpr terrarium::control::SubstrateSettingsBounds kSubstrateBounds{
+    cfg::kSubstrateCutMinTenths,      cfg::kSubstrateCutMaxTenths,
+    cfg::kSubstrateResumeMinTenths,   cfg::kSubstrateGapMinTenths,
+    cfg::kSubstrateApproachMinTenths, cfg::kSubstrateApproachMaxTenths,
+    cfg::kSubstrateSilentDelayMinMin, cfg::kSubstrateSilentDelayMaxMin};
+constexpr terrarium::control::SubstrateSettings kSubstrateDefaults{
+    true,
+    cfg::kSubstrateApproachTenths,
+    {cfg::kSubstrateCutAtTenths, cfg::kSubstrateResumeBelowTenths},
+    {cfg::kSubstrateCutAtTenths, cfg::kSubstrateResumeBelowTenths},
+    terrarium::control::SilentProbeBehaviour::kResumeOnAir,
+    cfg::kSubstrateSilentDelayMin};
+
 using terrarium::control::DayNightMode;
 using terrarium::control::FanMode;
 using terrarium::control::Moment;
@@ -74,6 +87,9 @@ StateSnapshot sample() {
   s.fanSettings.hibernation = {13 * 60, 5};
   s.fanSettings.saturation = {false, SaturationBehaviour::kAiring, 95, 10, 5, 60};
   s.fanBounds = kFanBounds;
+  s.substrateSettings = kSubstrateDefaults;
+  s.substratePartTenths = 10;
+  s.substrateBounds = kSubstrateBounds;
   return s;
 }
 
@@ -107,12 +123,54 @@ void test_formats_the_whole_state() {
       "\"hibernation\":{\"heure\":\"13:00\",\"duree\":5},\"saturation\":{\"active\":false,"
       "\"comportement\":\"aeration\",\"humidite\":95,\"attente\":10,\"duree\":5,\"pause\":60}},"
       "\"aeration_saturation\":false,\"chauffage_nuit\":{\"consigne\":19.0,\"hysteresis\":0.5},"
+      "\"securite_substrat\":{\"active\":true,\"approche\":0.0,"
+      "\"jour\":{\"coupure\":24.0,\"reprise\":18.5},\"nuit\":{\"coupure\":24.0,\"reprise\":18.5},"
+      "\"sonde_muette\":{\"comportement\":\"reprise-air\",\"delai\":2}},"
+      "\"seuils_substrat\":{\"coupure\":24.0,\"reprise\":18.5},\"part_substrat\":1.00,"
       "\"bornes\":{\"consigne\":[15.0,22.0],\"hysteresis\":[0.2,2.0],\"somme_max\":24.0,"
       "\"plages_max\":4,\"fuseau_max\":47,"
       "\"combinaisons\":[\"priorite-sht45\",\"priorite-dht11\",\"moyenne\",\"plus-froide\"],"
       "\"saisons_max\":6,\"ventilation\":{\"duree\":[1,30],\"periode\":[15,240],\"ecart\":[10,50],"
-      "\"humidite\":[80,100],\"attente\":[1,60],\"pause\":[15,240]}}}",
+      "\"humidite\":[80,100],\"attente\":[1,60],\"pause\":[15,240]},"
+      "\"substrat\":{\"coupure\":[20.0,28.0],\"reprise_min\":15.0,\"ecart_min\":2.0,"
+      "\"delai\":[1,30],\"approche\":[0.0,4.0],\"comportements\":[\"reprise-air\",\"maintien\"]}}}",
       out);
+}
+
+// RG-topics-mqtt (2026-018): the thresholds of the moment, and the part of
+// heating the approach allows.
+void test_the_substrate_thresholds_follow_the_moment() {
+  StateSnapshot s = sample();
+  s.moment = Moment::kNight;
+  s.substrateSettings.night = {220, 180};
+  s.substrateSettings.approachTenths = 20;
+  s.substratePartTenths = 5;
+  char out[terrarium::supervision::kStateSize];
+  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(
+      out, "\"seuils_substrat\":{\"coupure\":22.0,\"reprise\":18.0},\"part_substrat\":0.50,"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"approche\":2.0,"));
+}
+
+// A disabled cut publishes no thresholds and no part, and never cuts.
+void test_a_disabled_substrate_cut_has_no_thresholds() {
+  StateSnapshot s = sample();
+  s.substrateSettings.active = false;
+  s.substratePartTenths = terrarium::control::kNoSubstratePart;
+  char out[terrarium::supervision::kStateSize];
+  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"securite_substrat\":{\"active\":false,"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"seuils_substrat\":null,\"part_substrat\":null,"));
+}
+
+// A cut forbids all heating: part 0.
+void test_a_substrate_cut_allows_no_heating() {
+  StateSnapshot s = sample();
+  s.substrateCut = true;
+  s.substratePartTenths = 0;
+  char out[terrarium::supervision::kStateSize];
+  TEST_ASSERT_GREATER_THAN(0, formatState(s, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"part_substrat\":0.00,"));
 }
 
 // Before the first NTP answer, whether we are in a window is unknown: null.
@@ -165,11 +223,19 @@ void test_longest_state_fits() {
   s.saturationRunning = true;
   s.fanBounds = {65535, 65535, 65535, 65535, 65535, 65535,
                  65535, 65535, 65535, 65535, 65535, 65535};
+  s.substrateSettings = {true,
+                         -32768,
+                         {-32768, -32768},
+                         {-32768, -32768},
+                         terrarium::control::SilentProbeBehaviour::kResumeOnAir,
+                         65535};
+  s.substratePartTenths = 10;
+  s.substrateBounds = {-32768, -32768, -32768, -32768, -32768, -32768, 65535, 65535};
   char out[terrarium::supervision::kStateSize];
   const size_t length = formatState(s, out, sizeof(out));
   TEST_MESSAGE(out);
   TEST_ASSERT_GREATER_THAN(0, length);
-  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"pause\":[65535,65535]}}}"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"maintien\"]}}}"));
 }
 
 void test_invalid_readings_are_null() {
@@ -282,6 +348,9 @@ void test_no_retained_probe_is_null() {
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_formats_the_whole_state);
+  RUN_TEST(test_the_substrate_thresholds_follow_the_moment);
+  RUN_TEST(test_a_disabled_substrate_cut_has_no_thresholds);
+  RUN_TEST(test_a_substrate_cut_allows_no_heating);
   RUN_TEST(test_invalid_readings_are_null);
   RUN_TEST(test_publishes_the_substrate_cut);
   RUN_TEST(test_rejected_reading_names_its_cause);
