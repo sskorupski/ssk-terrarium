@@ -1,16 +1,18 @@
 # Phase 2 — Le régulateur complet en local
 
-La phase 2 apporte trois choses : la ventilation, l'éclairage à l'heure et la page web locale. **Cette notice ne couvre pour l'instant que la ventilation**, la seule des trois que le firmware réalise ; l'éclairage et la page web s'y ajouteront, et le tag `phase-2` ne se posera qu'une fois les trois montées et validées.
+La phase 2 apporte trois choses : la ventilation, le câble chauffant de l'air et la page web locale. **Cette notice couvre la ventilation et le câble de l'air** ; la page web s'y ajoutera, et le tag `phase-2` ne se posera qu'une fois les trois montées et validées. L'éclairage à l'heure, d'abord prévu ici, sort du régulateur : le ruban LED passe sur un programmateur horaire autonome, et son relais commande le câble de l'air (cadrage [ssk-terrarium-cadrage#2026-019](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-019)).
 
 À la fin de cette notice, un ventilateur de 80 mm, fixé dans le couvercle, renouvelle l'air du bac : 5 minutes toutes les heures en `ACTIF` et en `PLAGES`, 5 minutes par jour en `HIBERNATION`, jamais en `MAINTENANCE`. La durée, la période et l'heure se règlent par la liaison série ou à distance ([ventilation.md](../../ventilation.md), cadrage [ssk-terrarium-cadrage#2026-013](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-013)).
 
-Durée : une heure, essais compris. Tout se passe en 5 V : aucune étape ne touche au 230 V de la phase 1, qui reste en place. On débranche quand même le cordon secteur (**N**) avant d'ouvrir le boîtier (**T**).
+La ventilation (étapes 1 à 6) et le câble de l'air (étapes 7 à 12) se montent l'un sans l'autre, dans cet ordre ou dans l'autre.
+
+Durée de la ventilation : une heure, essais compris. Tout se passe en 5 V : aucune étape ne touche au 230 V de la phase 1, qui reste en place. On débranche quand même le cordon secteur (**N**) avant d'ouvrir le boîtier (**T**).
 
 La notice part du montage de la [phase 1](../phase-1/README.md) terminé : capteurs, relais 1 au chauffage, carte ESP32 alimentée par le bloc 12 V.
 
 ## Ce qu'il faut
 
-Les repères sont ceux de la phase 1 pour les pièces déjà montées ; les nouvelles pièces prennent les lettres suivantes, sans I ni O. Les pièces **X** et **Y** n'ont pas d'illustration : aucune image sous licence libre ne les montrait fidèlement.
+Les repères sont ceux de la phase 1 pour les pièces déjà montées ; les nouvelles pièces prennent les lettres suivantes, sans I ni O. Les pièces **X** et **Y** n'ont pas d'illustration : aucune image sous licence libre ne les montrait fidèlement. Le second socle (**Z**) est le même que le socle (**Q**) de la phase 1.
 
 | Repère | Pièce | Ce que c'est, et sa référence d'achat |
 | --- | --- | --- |
@@ -21,8 +23,14 @@ Les repères sont ceux de la phase 1 pour les pièces déjà montées ; les nouv
 | **M** | Fil souple | Un fil rouge, assez long pour aller de l'abaisseur (**H**) aux vis du relais 4 |
 | **N** | Cordon secteur | Monté à la phase 1 : on le débranche avant d'ouvrir le boîtier |
 | **T** | Boîtier électrique | Celui de la phase 1 |
+| **Q** | Socle de prise | Monté à la phase 1 ; il devient le socle **SUBSTRAT**, celui du câble du substrat |
+| **R** | Fil marron 1 mm² | Trois longueurs, pour la phase des deux relais de chauffage (câble de l'air) |
+| **S** | Borniers à levier | Pour le câble de l'air : un bornier à **3 places** pour la phase, un à **3 places** pour le neutre, à la place de celui à 2 places s'il y en avait un ; le bornier de la terre doit garder une place libre (celui à 5 places de la phase 1 en a trois) |
+| **V** | Multiprise | Celle de la phase 1 : elle ne sert plus, chaque câble chauffant a sa prise |
+| **W** | Câbles chauffants | Le câble de 6 m / 50 W, posé à la phase 1 au niveau du substrat, et le câble de 4,5 m / 25 W, Reptil'us HC Expert, à poser plus haut pour chauffer l'air |
 | **X** | Ventilateur | Carré de 80 × 80 mm, 10,8 mm d'épaisseur, 5 V, 0,18 A, avec un câble de 10 cm terminé par une petite fiche à deux fils, rouge et noir, au pas de 1,25 mm. Une flèche moulée sur le cadre montre le sens de l'air. Kubii « Ventilateur 80x80x10.8mm » |
 | **Y** | Rallonge du ventilateur | Câble à deux fils, rouge et noir, avec d'un côté une fiche qui s'accouple à celle du ventilateur (**X**), au pas de 1,25 mm (type Molex PicoBlade), et de l'autre des fils nus. Assez long pour aller du couvercle du bac au boîtier (**T**) |
+| **Z** | Second socle de prise | Prise femelle à visser dans le boîtier, comme le socle (**Q**) : le socle **AIR**, celui du câble de l'air. Avec la variante de la phase 1, une seconde rallonge courte dont on coupe la fiche d'ordinateur |
 
 Outils et accessoires, sans repère :
 
@@ -122,3 +130,105 @@ Le ventilateur tire 0,18 A sous 5 V. L'abaisseur, qui débite environ 0,3 A pour
 La ventilation est montée quand les six étapes donnent ce qu'elles annoncent. Reporter dans le cadrage [ssk-terrarium-cadrage#2026-013](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-013) la tension de l'abaisseur mesurée à l'étape 5 avec le ventilateur en marche.
 
 Les valeurs de 5 minutes par heure restent à éprouver : les lignes `MESURE` montrent l'humidité du bac avant et après chaque aération. Une humidité qui chute trop appelle une aération plus courte ou plus rare ; un air qui reste saturé, l'inverse. Les réglages se changent sans rien rebrancher, par `CONFIG` sur la liaison série ou à distance : durée et période de jour et de nuit, mode `rubato` pour une ventilation moins régulière, jour et nuit au fil des saisons, option saturation ([ventilation.md](../../ventilation.md)), dans les bornes du firmware.
+
+## Le câble chauffant de l'air
+
+Le câble de la phase 1, au niveau du substrat, chauffe surtout le terreau. Quand le substrat atteint son seuil, la coupure par le substrat l'arrête, et l'air du bac n'est plus chauffé jusqu'à ce que le substrat soit redescendu : des heures, une nuit d'hiver. Le câble de l'air, posé plus haut, prend le relais 2, laissé libre par l'éclairage :
+
+- les deux câbles chauffent ensemble quand l'air est sous la consigne, dans tous les modes ;
+- la coupure par le substrat n'arrête que le câble du substrat : le câble de l'air continue jusqu'à ce que l'air atteigne la consigne ;
+- le câble de l'air s'arrête quand le substrat atteint **28 °C**, et reprend sous **26 °C**, tant que la coupure par le substrat est active. Ce plafond n'est pas un réglage.
+
+Le pourquoi est dans le cadrage [ssk-terrarium-cadrage#2026-019](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-019). La puissance totale reste de 75 W. Il n'y a toujours ni fusible ni limiteur matériel ([#9](https://github.com/sskorupski/ssk-terrarium/issues/9), [#10](https://github.com/sskorupski/ssk-terrarium/issues/10)) : si un relais reste collé, rien de matériel ne coupe son câble.
+
+Durée : deux heures, pose du câble comprise. Les étapes 7 et 8 ne touchent qu'au 5 V et au 3,3 V ; l'étape 9 câble le 230 V, avec les mêmes précautions qu'à l'étape 9 de la phase 1 : **tout se fait cordon secteur débranché**, et qui n'a jamais câblé de 230 V la fait faire par quelqu'un qui en a l'habitude.
+
+## Étape 7 — Mettre à jour le firmware
+
+*Pièces : A.*
+
+Le firmware qui commande le câble de l'air remplace celui de la ventilation. Une fois le Wi-Fi configuré, il s'installe à distance, sans ouvrir le boîtier ([supervision.md](../../supervision.md#mettre-à-jour-le-firmware-à-distance)) ; sinon, par l'USB, comme à l'étape 1.
+
+Au démarrage, la ligne `MESURE` porte un champ de plus, `chauffage_air`, à côté de `chauffage` :
+
+```
+MESURE air=17.8C hr=62% (sht45) sht45=17.8C/62% dht11=18.0C/58% substrat=17.5C chauffage=0 chauffage_air=0 mode=MAINTENANCE heure=--
+```
+
+`chauffage` est le câble du substrat, sur le relais 1 ; `chauffage_air` le câble de l'air, sur le relais 2.
+
+## Étape 8 — Vérifier la voie du câble de l'air, à vide
+
+*Pièces : A, B, C, E, F.*
+
+**Ce qu'on vérifie, et pourquoi.** Le relais 2 n'a encore rien commandé. On vérifie, sans 230 V, qu'il s'enclenche avec le relais 1, qu'il ne s'arrête pas avec lui quand le substrat est trop chaud, et qu'il s'arrête à 28 °C. Il faut de la glace pour refroidir le capteur d'air, et deux verres d'eau, l'un tiède, l'autre chaude, pour chauffer la sonde du substrat, qui est étanche.
+
+1. Cordon secteur (**N**) et bloc 12 V (**F**) débranchés, ouvrir le boîtier (**T**). **Repérer les vis du relais 2** comme celles du relais 1 à l'étape 4 de la phase 1 : sur le bord du module, les trois vis à côté du nom `K2`. Celle du milieu est **COM**. Multimètre en testeur de continuité, relais relâché, une pointe sur COM, l'autre sur chaque vis extérieure : celle qui sonne est **NC** ; l'autre est **NO**. Marquer la vis **NO** au feutre.
+2. Brancher la carte ESP32 (**A**) par l'USB, puis le bloc 12 V ; le cordon secteur reste débranché. Ouvrir le terminal série, et taper `SUBSTRAT` : **noter la ligne** qu'elle écrit, pour remettre les réglages au geste 9.
+3. Pour l'essai, abaisser la coupure à 20 °C et sa reprise à 18 °C, sans approche. Taper `CONFIG {"securite_substrat":{"active":true,"approche":0,"jour":{"coupure":20,"reprise":18},"nuit":{"coupure":20,"reprise":18}}}` puis **Entrée** : la carte répond par la ligne `SUBSTRAT`, finie par `: enregistree`.
+4. Taper `MODE ACTIF`, puis poser le sachet de glaçons sur le capteur d'air (**B**), comme à l'étape 7 de la phase 1. Quand l'air passe sous la consigne, **les relais 1 et 2 s'enclenchent ensemble**, et la ligne `MESURE` affiche `chauffage=1 chauffage_air=1`.
+5. Glaçons toujours en place, plonger la sonde du substrat (**C**) dans l'eau **tiède**, entre 22 et 26 °C : la ligne `MESURE` le dit, `substrat=`. Ajouter de l'eau froide ou chaude pour y rester. Dès 20 °C, la carte écrit `COUPURE chauffage : substrat a …` : **le relais 1 se relâche, le relais 2 reste enclenché**, et la ligne `MESURE` affiche `chauffage=0 chauffage_air=1`.
+6. Plonger la sonde dans l'eau **chaude**, au-dessus de 30 °C, sans dépasser 60 °C : dès 28 °C, **le relais 2 se relâche à son tour**, et `MESURE` affiche `chauffage=0 chauffage_air=0`.
+7. Sortir la sonde de l'eau et la laisser refroidir à l'air : sous 26 °C, le relais 2 s'enclenche de nouveau ; sous 18 °C, le relais 1 aussi.
+8. Retirer les glaçons : quand l'air dépasse la consigne plus l'hystérésis, les deux relais se relâchent ensemble.
+9. Remettre les réglages notés au geste 2, par `CONFIG {"securite_substrat":{…}}` avec les valeurs de la ligne `SUBSTRAT` : par défaut, `{"securite_substrat":{"approche":0,"jour":{"coupure":24,"reprise":18.5},"nuit":{"coupure":24,"reprise":18.5}}}`. Taper `SUBSTRAT` : la ligne est celle du geste 2. Taper `MODE MAINTENANCE`, puis débrancher le bloc 12 V et l'USB.
+
+**Le résultat attendu** : les deux relais s'enclenchent ensemble sur l'air ; la coupure par le substrat ne relâche que le relais 1 ; le relais 2 ne se relâche qu'à 28 °C. Un relais 2 qui se relâche avec le relais 1 au geste 5, ou qui ne s'enclenche pas au geste 4 : s'arrêter là, et vérifier le fil de `IN2` (étape 5 de la phase 1) et la version du firmware.
+
+## Étape 9 — Câbler le 230 V du câble de l'air
+
+*Pièces : E, N, Q, R, S, T, Z.*
+
+**Toute cette étape se fait cordon secteur débranché.** Le boîtier (**T**) ne se rebranche qu'à l'étape 10, refermé.
+
+La **phase** du cordon secteur, qui allait jusqu'ici au seul relais 1, se partage maintenant entre le relais 1 et le relais 2, par un bornier. Chaque relais coupe la phase de son socle : le relais 1 celui du câble du substrat, le relais 2 celui du câble de l'air. Le neutre et la terre vont directement aux deux socles.
+
+1. Dans le boîtier, fixer le second socle de prise (**Z**) à côté du premier (**Q**). Marquer au feutre ou à l'étiquette le premier **SUBSTRAT**, le second **AIR**.
+2. **La phase.** Retirer le fil marron du cordon secteur (**N**) de la vis **COM** du relais 1, et le pincer dans un bornier à levier à 3 places (**S**). Du même bornier, un fil marron (**R**) vers la vis **COM** du relais 1, et un autre vers la vis **COM** du relais 2.
+3. Vis **NO** du relais 2 vers la borne **L** du socle AIR, par un fil marron (**R**). Rien ne se branche sur la vis **NC** du relais 2. La vis **NO** du relais 1 reste reliée au socle SUBSTRAT, comme à la phase 1.
+4. **Le neutre.** Le bleu du cordon, celui du socle SUBSTRAT et celui du socle AIR dans un même bornier à 3 places, à la place de celui à 2 places s'il y en avait un.
+5. **La terre.** Le vert et jaune du socle AIR dans une place libre du bornier de la terre, avec ceux du cordon et du socle SUBSTRAT.
+6. Serrer chaque vis des relais et des socles, abaisser chaque levier, puis tirer sur chaque fil : aucun ne doit sortir. Aucun fil 230 V ne touche la carte ESP32, l'abaisseur ou les picots `IN` du module.
+7. **Vérifier avant d'alimenter**, module relais sans alimentation, multimètre en testeur de continuité : la broche **L** du socle AIR ne sonne avec rien, ni avec la phase du cordon ni avec la borne L du socle SUBSTRAT ; la broche **N** de chaque socle sonne avec le neutre de la fiche du cordon, et sa broche de **terre** avec celle de la fiche.
+8. Refermer le boîtier.
+
+![Câblage 230 V des deux câbles chauffants](chauffage-air.svg)
+
+**Avec la variante de la phase 1** (une rallonge à la place du socle), le socle AIR est une seconde rallonge courte dont on coupe la fiche d'ordinateur. Son marron va directement sur la vis **NO** du relais 2 : le fil du geste 3 ne sert pas. Ses bleu et vert et jaune rejoignent les borniers du neutre et de la terre, comme aux gestes 4 et 5.
+
+## Étape 10 — Essayer à la lampe, et reconnaître les prises
+
+*Pièces : A, B, C, F, N.*
+
+Une lampe de chevet, interrupteur allumé, montre ce que fait chaque prise ; c'est aussi l'occasion de vérifier qu'on n'a pas inversé les deux.
+
+1. Brancher la lampe sur le socle **AIR**, puis le cordon secteur (**N**) et le bloc 12 V (**F**). La lampe reste éteinte.
+2. Abaisser la coupure à 20 °C comme au geste 3 de l'étape 8, taper `MODE ACTIF` et poser les glaçons sur le capteur d'air : la lampe s'allume avec les relais.
+3. Sonde du substrat dans l'eau tiède, entre 22 et 26 °C : `COUPURE chauffage` s'écrit, et **la lampe reste allumée**.
+4. Débrancher le cordon secteur, passer la lampe sur le socle **SUBSTRAT**, rebrancher le cordon. Sonde toujours dans l'eau tiède : **la lampe est éteinte**. Sortir la sonde et la laisser refroidir sous 18 °C : la lampe s'allume.
+5. Retirer les glaçons, remettre les réglages du substrat comme au geste 9 de l'étape 8, taper `MODE MAINTENANCE`. Débrancher le cordon secteur et retirer la lampe.
+
+**Si la lampe s'éteint au geste 3**, les prises sont inversées, ou le câblage de l'étape 9 l'est : ne pas brancher les câbles chauffants avant d'avoir trouvé pourquoi. Le câble de l'air serait coupé avec le substrat, et le câble du substrat chaufferait au-delà de son seuil.
+
+## Étape 11 — Poser le câble de l'air
+
+*Pièces : W.*
+
+Le câble de 4,5 m / 25 W (**W**) se pose comme celui de la phase 1 :
+
+1. **À l'extérieur du bac, contre une vitre, jamais dans le bac ni dans son couvercle** : seule la très basse tension y entre (INV-4). Une vitre latérale ou arrière, **plus haut que le substrat**, au-dessus du câble de la phase 1.
+2. En allers-retours, à environ 4 cm d'écart : le câble ne se croise jamais lui-même et ne se superpose pas, sous peine de chauffer en un point jusqu'à s'abîmer.
+3. Recouvrir de l'isolant, comme le premier.
+4. Brancher la fiche du câble de l'air sur le socle **AIR**, celle du câble du substrat sur le socle **SUBSTRAT**. La multiprise (**V**) ne sert plus.
+
+## Étape 12 — Remettre en service
+
+*Pièces : A, F, N.*
+
+1. Rebrancher le cordon secteur (**N**) et le bloc 12 V (**F**), et taper le mode voulu, `MODE ACTIF` ou `MODE PLAGES`.
+2. Taper `SUBSTRAT` : la ligne est celle du geste 2 de l'étape 8.
+3. Suivre les lignes `MESURE` pendant une nuit, ou l'historique s'il est en place : pendant une coupure par le substrat, `chauffage=0` et `chauffage_air=1`, et l'air ne chute plus comme avant.
+
+## Fin du câble de l'air
+
+Le câble de l'air est monté quand les étapes 7 à 12 donnent ce qu'elles annoncent. Reporter dans le cadrage [ssk-terrarium-cadrage#2026-019](https://ssk-canon.s3-website.fr-par.scw.cloud/ssk-it/ssk-terrarium-cadrage/cadrages/2026-019) où le câble a été posé, et ce que montre la première nuit : la température de l'air pendant les coupures, et si elle tient la consigne.
