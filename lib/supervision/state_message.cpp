@@ -124,6 +124,58 @@ bool appendFan(char* out, size_t size, size_t& used, const control::FanSettings&
                  unsigned{sat.waitMin}, unsigned{sat.durationMin}, unsigned{sat.pauseMin});
 }
 
+// Tenths of a degree as "24.0".
+struct Tenths {
+  char text[10];
+  explicit Tenths(int16_t tenths) {
+    std::snprintf(text, sizeof(text), "%.1f", static_cast<double>(tenths) / 10.0);
+  }
+};
+
+// "securite_substrat", "seuils_substrat" and "part_substrat"
+// (RG-coupure-par-le-substrat).
+bool appendSubstrate(char* out, size_t size, size_t& used, const StateSnapshot& s) {
+  const control::SubstrateSettings& c = s.substrateSettings;
+  if (!appendf(out, size, used,
+               ",\"securite_substrat\":{\"active\":%s,\"approche\":%s,"
+               "\"jour\":{\"coupure\":%s,\"reprise\":%s},\"nuit\":{\"coupure\":%s,\"reprise\":%s},"
+               "\"sonde_muette\":{\"comportement\":\"%s\",\"delai\":%u}}",
+               boolText(c.active), Tenths(c.approachTenths).text, Tenths(c.day.cutTenths).text,
+               Tenths(c.day.resumeTenths).text, Tenths(c.night.cutTenths).text,
+               Tenths(c.night.resumeTenths).text,
+               control::silentProbeBehaviourName(c.silentBehaviour), unsigned{c.silentDelayMin})) {
+    return false;
+  }
+  if (c.active) {
+    const control::SubstrateThresholds t = control::thresholdsFor(c, s.moment);
+    if (!appendf(out, size, used, ",\"seuils_substrat\":{\"coupure\":%s,\"reprise\":%s}",
+                 Tenths(t.cutTenths).text, Tenths(t.resumeTenths).text)) {
+      return false;
+    }
+  } else if (!appendf(out, size, used, ",\"seuils_substrat\":null")) {
+    return false;
+  }
+  if (!c.active || s.substratePartTenths < 0 || s.substratePartTenths > 10) {
+    return appendf(out, size, used, ",\"part_substrat\":null");
+  }
+  return appendf(out, size, used, ",\"part_substrat\":%.2f",
+                 static_cast<double>(s.substratePartTenths) / 10.0);
+}
+
+// The bounds of "securite_substrat", inside "bornes".
+bool appendSubstrateBounds(char* out, size_t size, size_t& used,
+                           const control::SubstrateSettingsBounds& b) {
+  return appendf(out, size, used,
+                 ",\"substrat\":{\"coupure\":[%s,%s],\"reprise_min\":%s,\"ecart_min\":%s,"
+                 "\"delai\":[%u,%u],\"approche\":[%s,%s],\"comportements\":[\"%s\",\"%s\"]}",
+                 Tenths(b.cutMinTenths).text, Tenths(b.cutMaxTenths).text,
+                 Tenths(b.resumeMinTenths).text, Tenths(b.gapMinTenths).text,
+                 unsigned{b.delayMinMin}, unsigned{b.delayMaxMin}, Tenths(b.approachMinTenths).text,
+                 Tenths(b.approachMaxTenths).text,
+                 control::silentProbeBehaviourName(control::SilentProbeBehaviour::kResumeOnAir),
+                 control::silentProbeBehaviourName(control::SilentProbeBehaviour::kHold));
+}
+
 }  // namespace
 
 size_t formatState(const StateSnapshot& s, char* out, size_t size) {
@@ -200,7 +252,8 @@ size_t formatState(const StateSnapshot& s, char* out, size_t size) {
       !appendf(out, size, used,
                ",\"aeration_saturation\":%s,\"chauffage_nuit\":{\"consigne\":%.1f,"
                "\"hysteresis\":%.1f}",
-               boolText(s.saturationRunning), s.nightHeat.setpointC, s.nightHeat.hysteresisC)) {
+               boolText(s.saturationRunning), s.nightHeat.setpointC, s.nightHeat.hysteresisC) ||
+      !appendSubstrate(out, size, used, s)) {
     return 0;
   }
   const control::FanSettingsBounds& f = s.fanBounds;
@@ -208,7 +261,7 @@ size_t formatState(const StateSnapshot& s, char* out, size_t size) {
                ",\"bornes\":{\"consigne\":[%.1f,%.1f],\"hysteresis\":[%.1f,%.1f],"
                "\"somme_max\":%.1f,\"plages_max\":%u,\"fuseau_max\":%u,\"combinaisons\":[%s],"
                "\"saisons_max\":%u,\"ventilation\":{\"duree\":[%u,%u],\"periode\":[%u,%u],"
-               "\"ecart\":[%u,%u],\"humidite\":[%u,%u],\"attente\":[%u,%u],\"pause\":[%u,%u]}}}",
+               "\"ecart\":[%u,%u],\"humidite\":[%u,%u],\"attente\":[%u,%u],\"pause\":[%u,%u]}",
                s.bounds.setpointMinC, s.bounds.setpointMaxC, s.bounds.hysteresisMinC,
                s.bounds.hysteresisMaxC, s.bounds.stopBelowC,
                static_cast<unsigned>(control::kMaxTimeWindows),
@@ -218,7 +271,9 @@ size_t formatState(const StateSnapshot& s, char* out, size_t size) {
                unsigned{f.spreadMinPercent}, unsigned{f.spreadMaxPercent},
                unsigned{f.humidityMinPercent}, unsigned{f.humidityMaxPercent},
                unsigned{f.waitMinMin}, unsigned{f.waitMaxMin}, unsigned{f.pauseMinMin},
-               unsigned{f.pauseMaxMin})) {
+               unsigned{f.pauseMaxMin}) ||
+      !appendSubstrateBounds(out, size, used, s.substrateBounds) ||
+      !appendf(out, size, used, "}}")) {
     return 0;
   }
   return used;

@@ -25,6 +25,8 @@ constexpr char kProbeSetupKey[] = "sondes";
 // size, such as 2026-013's six bytes, reads as nothing stored.
 constexpr char kFanKey[] = "ventilation";
 constexpr char kDayNightKey[] = "jour_nuit";
+// Bytes of control::encodeSubstrateSettings (2026-018).
+constexpr char kSubstrateKey[] = "substrat";
 constexpr char kNightSetpointKey[] = "consigne_nuit";
 constexpr char kNightHysteresisKey[] = "hyst_nuit";
 
@@ -204,6 +206,14 @@ bool SettingsStore::loadFanSettings(uint8_t (&out)[control::kFanStoredSize]) {
 
 bool SettingsStore::saveFanSettings(const uint8_t (&stored)[control::kFanStoredSize]) {
   return saveBlob(kFanKey, stored);
+}
+
+bool SettingsStore::loadSubstrateSettings(uint8_t (&out)[control::kSubstrateStoredSize]) {
+  return loadBlob(kSubstrateKey, out);
+}
+
+bool SettingsStore::saveSubstrateSettings(const uint8_t (&stored)[control::kSubstrateStoredSize]) {
+  return saveBlob(kSubstrateKey, stored);
 }
 
 bool SettingsStore::loadDayNight(uint8_t (&out)[control::kDayNightStoredSize]) {

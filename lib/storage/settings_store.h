@@ -9,6 +9,7 @@
 #include "identity.h"
 #include "network_settings.h"
 #include "posix_tz.h"
+#include "substrate_cap.h"
 #include "time_windows.h"
 #include "update_command.h"
 #include "ventilation.h"
@@ -72,6 +73,11 @@ class SettingsStore {
   bool saveFanSettings(const uint8_t (&stored)[control::kFanStoredSize]);
   bool loadDayNight(uint8_t (&out)[control::kDayNightStoredSize]);
   bool saveDayNight(const uint8_t (&stored)[control::kDayNightStoredSize]);
+
+  // The substrate cut, as the bytes of control::encodeSubstrateSettings
+  // (RG-coupure-par-le-substrat, RG-mode-au-demarrage), as loadFanSettings.
+  bool loadSubstrateSettings(uint8_t (&out)[control::kSubstrateStoredSize]);
+  bool saveSubstrateSettings(const uint8_t (&stored)[control::kSubstrateStoredSize]);
 
   // Night setpoint and hysteresis of ACTIF (cadrage 2026-016), as
   // loadHeatSettings.

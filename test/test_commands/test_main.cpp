@@ -387,6 +387,57 @@ void test_config_payload_refuses_a_bad_ventilation() {
   TEST_ASSERT_EQUAL_STRING("ventilation invalide", describe(ConfigError::kBadFan));
 }
 
+// RG-topics-mqtt (2026-018): "securite_substrat" is partial at two levels,
+// temperatures in tenths of a degree; the bounds are the loop's.
+void test_config_payload_carries_the_substrate_safety() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone,
+                    parseCommand("{\"securite_substrat\":{\"active\":false,\"approche\":2,"
+                                 "\"nuit\":{\"coupure\":22.1,\"reprise\":18},"
+                                 "\"sonde_muette\":{\"comportement\":\"maintien\",\"delai\":5}}}",
+                                 command));
+  TEST_ASSERT_TRUE(command.hasSubstrate);
+  const terrarium::control::SubstrateSettingsPatch& p = command.substrate;
+  TEST_ASSERT_TRUE(p.hasActive);
+  TEST_ASSERT_FALSE(p.active);
+  TEST_ASSERT_TRUE(p.hasApproach);
+  TEST_ASSERT_EQUAL_INT16(20, p.approachTenths);
+  TEST_ASSERT_FALSE(p.day.hasCut);
+  TEST_ASSERT_TRUE(p.night.hasCut);
+  TEST_ASSERT_EQUAL_INT16(221, p.night.cutTenths);
+  TEST_ASSERT_EQUAL_INT16(180, p.night.resumeTenths);
+  TEST_ASSERT_TRUE(p.hasBehaviour);
+  TEST_ASSERT_EQUAL(terrarium::control::SilentProbeBehaviour::kHold, p.behaviour);
+  TEST_ASSERT_EQUAL_UINT16(5, p.delayMin);
+  TEST_ASSERT_FALSE(command.hasHeat);
+}
+
+void test_config_payload_leaves_the_substrate_bounds_to_the_loop() {
+  ConfigCommand command{};
+  TEST_ASSERT_EQUAL(ConfigError::kNone,
+                    parseCommand("{\"securite_substrat\":{\"jour\":{\"coupure\":40}}}", command));
+  TEST_ASSERT_EQUAL_INT16(400, command.substrate.day.cutTenths);
+}
+
+void test_config_payload_refuses_a_bad_substrate_safety() {
+  for (const char* json :
+       {"{\"securite_substrat\":{}}", "{\"securite_substrat\":true}",
+        "{\"securite_substrat\":{\"active\":1}}", "{\"securite_substrat\":{\"jour\":{}}}",
+        "{\"securite_substrat\":{\"coupure\":24}}",
+        "{\"securite_substrat\":{\"jour\":{\"coupure\":24.05}}}",
+        "{\"securite_substrat\":{\"jour\":{\"coupure\":\"24\"}}}",
+        "{\"securite_substrat\":{\"nuit\":{\"delai\":2}}}",
+        "{\"securite_substrat\":{\"approche\":true}}",
+        "{\"securite_substrat\":{\"sonde_muette\":{\"comportement\":\"reste-coupe\"}}}",
+        "{\"securite_substrat\":{\"sonde_muette\":{\"delai\":2.5}}}",
+        "{\"securite_substrat\":{\"sonde_muette\":{}}}",
+        "{\"consigne\":20,\"securite_substrat\":{\"jour\":{\"reprise\":null}}}"}) {
+    ConfigCommand command{};
+    TEST_ASSERT_EQUAL_MESSAGE(ConfigError::kBadSubstrate, parseCommand(json, command), json);
+  }
+  TEST_ASSERT_EQUAL_STRING("securite_substrat invalide", describe(ConfigError::kBadSubstrate));
+}
+
 // RG-jour-et-nuit: "jour_nuit" is whole, checked here, seasons sorted.
 void test_config_payload_carries_a_day_night() {
   ConfigCommand command{};
@@ -478,6 +529,15 @@ void test_setting_events() {
       "{\"evenement\":\"reglage\",\"champ\":\"ventilation\","
       "\"resultat\":\"refuse\",\"raison\":\"ventilation invalide\"}",
       out);
+  TEST_ASSERT_TRUE(formatFieldEvent("securite_substrat", SettingOutcome::kInvalidSubstrate, out));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"evenement\":\"reglage\",\"champ\":\"securite_substrat\","
+      "\"resultat\":\"refuse\",\"raison\":\"securite_substrat invalide\"}",
+      out);
+  TEST_ASSERT_TRUE(formatSubstrateSafetyEvent(false, out));
+  TEST_ASSERT_EQUAL_STRING("{\"evenement\":\"securite-substrat\",\"active\":false}", out);
+  TEST_ASSERT_TRUE(formatSubstrateSafetyEvent(true, out));
+  TEST_ASSERT_EQUAL_STRING("{\"evenement\":\"securite-substrat\",\"active\":true}", out);
   TEST_ASSERT_TRUE(formatNightHeatEvent(HeatSettings{17.0f, 0.5f}, true, out));
   TEST_ASSERT_EQUAL_STRING(
       "{\"evenement\":\"reglage\",\"chauffage_nuit\":{\"consigne\":17.0,"
@@ -517,6 +577,9 @@ int main() {
   RUN_TEST(test_config_payload_carries_the_ventilation);
   RUN_TEST(test_config_payload_leaves_the_ventilation_bounds_to_the_loop);
   RUN_TEST(test_config_payload_refuses_a_bad_ventilation);
+  RUN_TEST(test_config_payload_carries_the_substrate_safety);
+  RUN_TEST(test_config_payload_leaves_the_substrate_bounds_to_the_loop);
+  RUN_TEST(test_config_payload_refuses_a_bad_substrate_safety);
   RUN_TEST(test_config_payload_carries_a_day_night);
   RUN_TEST(test_config_payload_refuses_a_bad_day_night);
   RUN_TEST(test_config_payload_refuses_seven_seasons);

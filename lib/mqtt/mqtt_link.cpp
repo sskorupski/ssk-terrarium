@@ -12,7 +12,7 @@ namespace terrarium::mqtt {
 
 namespace {
 
-constexpr uint16_t kBufferSize = 2176;  // State JSON up to supervision::kStateSize, plus the topic.
+constexpr uint16_t kBufferSize = 2688;  // State JSON up to supervision::kStateSize, plus the topic.
 // PubSubClient refuses a packet whose header (MQTT_MAX_HEADER_SIZE), topic
 // length, topic and payload exceed the buffer.
 static_assert(kBufferSize >= MQTT_MAX_HEADER_SIZE + 2 + (supervision::kTopicSize - 1) +

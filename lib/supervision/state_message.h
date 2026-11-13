@@ -11,15 +11,16 @@
 #include "mode_machine.h"
 #include "posix_tz.h"
 #include "sensor_watch.h"
+#include "substrate_cap.h"
 #include "time_windows.h"
 #include "ventilation.h"
 
 namespace terrarium::supervision {
 
 // Largest state JSON: four windows, six seasons, the longest time zone, the
-// longest cause of rejection, both probes, the ventilation and the bounds fit
-// (test_longest_state_fits).
-constexpr size_t kStateSize = 2048;
+// longest cause of rejection, both probes, the ventilation, the substrate cut
+// and the bounds fit (test_longest_state_fits).
+constexpr size_t kStateSize = 2560;
 
 // One air probe as published in "sondes" (RG-topics-mqtt, cadrage 2026-007).
 struct ProbeState {
@@ -66,6 +67,11 @@ struct StateSnapshot {
   control::FanSettings fanSettings;       // "ventilation" (RG-ventilation-periodique).
   bool saturationRunning;                 // "aeration_saturation".
   control::FanSettingsBounds fanBounds;   // Compile-time bounds (RG-reglages-bornes).
+  // "securite_substrat"; "seuils_substrat" are those of `moment`, null when
+  // disabled (RG-coupure-par-le-substrat, 2026-018).
+  control::SubstrateSettings substrateSettings;
+  int8_t substratePartTenths;  // "part_substrat", or control::kNoSubstratePart.
+  control::SubstrateSettingsBounds substrateBounds;  // Compile-time (RG-reglages-bornes).
 };
 
 // Writes the JSON into `out`. Returns its length, or 0 if it does not fit.

@@ -191,7 +191,7 @@ Les valeurs ressemblent à la pièce : une température proche de celle d'un the
 
 *Pièces : A, B, C, K.*
 
-En mode `ACTIF`, le chauffage s'allume sous 18,5 °C et s'éteint à 19,5 °C. Quel que soit l'air, il se coupe dès que la sonde du substrat atteint 24 °C, et reste coupé jusqu'à ce qu'elle redescende sous 18,5 °C. Les mesures arrivent toutes les 30 secondes : chaque effet attendu peut prendre ce délai.
+En mode `ACTIF`, le chauffage s'allume sous 18,5 °C et s'éteint à 19,5 °C. Quel que soit l'air, il se coupe dès que la sonde du substrat atteint 24 °C, et reste coupé jusqu'à ce qu'elle redescende sous 18,5 °C : ce sont les seuils de la coupure par le substrat tant qu'aucun réglage ne les change ([coupure-substrat.md](../../coupure-substrat.md)). Les mesures arrivent toutes les 30 secondes : chaque effet attendu peut prendre ce délai.
 
 1. **Chauffe** : si l'air est au-dessus de 18,5 °C, approcher du capteur un sachet de glaçons, sans le mouiller. Dès qu'une mesure passe sous 18,5 °C, le relais 1 s'enclenche et la mesure affiche `chauffage=1`.
 2. **Arrêt** : retirer le sachet et réchauffer le capteur dans la main. Dès qu'une mesure dépasse 19,5 °C, le relais 1 se relâche et la mesure affiche `chauffage=0`.

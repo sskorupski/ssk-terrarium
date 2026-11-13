@@ -21,6 +21,7 @@ constexpr char kCombinationField[] = "combinaison";
 constexpr char kFanField[] = "ventilation";
 constexpr char kDayNightField[] = "jour_nuit";
 constexpr char kNightHeatField[] = "chauffage_nuit";
+constexpr char kSubstrateField[] = "securite_substrat";
 
 // A whole number of minutes or percent, 0 to 65535: 5.5, booleans and strings
 // are refused.
@@ -169,6 +170,54 @@ bool parseNightHeat(JsonVariantConst value, NightHeatPatch& out) {
   return ok;
 }
 
+// A temperature to the tenth of a degree: 22.1 and 22 are, 22.05 is not.
+bool readTenths(JsonVariantConst value, int16_t& out) {
+  float celsius = 0.0f;
+  return readFloat(value, celsius) && control::tenthsFromCelsius(celsius, out);
+}
+
+bool parseSubstrateThresholds(JsonVariantConst value, control::SubstrateThresholdsPatch& out) {
+  return forEachField(value, [&out](const char* key, JsonVariantConst v) {
+    if (std::strcmp(key, "coupure") == 0) return (out.hasCut = readTenths(v, out.cutTenths));
+    if (std::strcmp(key, "reprise") == 0) return (out.hasResume = readTenths(v, out.resumeTenths));
+    return false;
+  });
+}
+
+bool parseSilentProbe(JsonVariantConst value, control::SubstrateSettingsPatch& out) {
+  return forEachField(value, [&out](const char* key, JsonVariantConst v) {
+    if (std::strcmp(key, "comportement") == 0) {
+      const char* text = nullptr;
+      return (out.hasBehaviour =
+                  readText(v, text) && control::parseSilentProbeBehaviour(text, out.behaviour));
+    }
+    if (std::strcmp(key, "delai") == 0) return (out.hasDelay = readUint(v, out.delayMin));
+    return false;
+  });
+}
+
+// {"active":…,"approche":…,"jour":{…},"nuit":{…},"sonde_muette":{…}}, any of
+// them, the objects partial and non-empty.
+bool parseSubstrate(JsonVariantConst value, control::SubstrateSettingsPatch& out) {
+  control::SubstrateSettingsPatch patch{};
+  const bool ok = forEachField(value, [&patch](const char* key, JsonVariantConst v) {
+    if (std::strcmp(key, "active") == 0) {
+      if (!v.is<bool>()) return false;
+      patch.active = v.as<bool>();
+      return (patch.hasActive = true);
+    }
+    if (std::strcmp(key, "approche") == 0) {
+      return (patch.hasApproach = readTenths(v, patch.approachTenths));
+    }
+    if (std::strcmp(key, "jour") == 0) return parseSubstrateThresholds(v, patch.day);
+    if (std::strcmp(key, "nuit") == 0) return parseSubstrateThresholds(v, patch.night);
+    if (std::strcmp(key, "sonde_muette") == 0) return parseSilentProbe(v, patch);
+    return false;
+  });
+  if (ok) out = patch;
+  return ok;
+}
+
 // {"sht45": "interieure"|"exterieure", "dht11": ...}, at least one probe.
 bool parseProbes(JsonVariantConst value, ConfigCommand& out) {
   if (!value.is<JsonObjectConst>()) return false;
@@ -297,6 +346,11 @@ ConfigError parseConfigPayload(const uint8_t* payload, size_t length,
       next.hasNightHeat = true;
       continue;
     }
+    if (std::strcmp(key, kSubstrateField) == 0) {
+      if (!parseSubstrate(field.value(), next.substrate)) return ConfigError::kBadSubstrate;
+      next.hasSubstrate = true;
+      continue;
+    }
     float* target = nullptr;
     if (std::strcmp(key, kSetpointField) == 0) {
       target = &next.heat.setpointC;
@@ -342,6 +396,8 @@ const char* describe(ConfigError error) {
       return "jour_nuit invalide";
     case ConfigError::kBadNightHeat:
       return "chauffage_nuit invalide";
+    case ConfigError::kBadSubstrate:
+      return "securite_substrat invalide";
   }
   return "commande invalide";
 }
@@ -437,10 +493,19 @@ bool formatFieldEvent(const char* field, SettingOutcome outcome, char (&out)[kEv
   if (outcome == SettingOutcome::kInvalidFan) {
     result = "\"refuse\",\"raison\":\"ventilation invalide\"";
   }
+  if (outcome == SettingOutcome::kInvalidSubstrate) {
+    result = "\"refuse\",\"raison\":\"securite_substrat invalide\"";
+  }
   return fits(
       std::snprintf(out, sizeof(out),
                     "{\"evenement\":\"reglage\",\"champ\":\"%s\",\"resultat\":%s}", field, result),
       sizeof(out));
+}
+
+bool formatSubstrateSafetyEvent(bool active, char (&out)[kEventSize]) {
+  return fits(std::snprintf(out, sizeof(out), "{\"evenement\":\"securite-substrat\",\"active\":%s}",
+                            active ? "true" : "false"),
+              sizeof(out));
 }
 
 bool formatNightHeatEvent(const control::HeatSettings& settings, bool applied,

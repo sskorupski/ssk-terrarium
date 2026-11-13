@@ -12,6 +12,7 @@
 #include "mode_machine.h"
 #include "posix_tz.h"
 #include "probe_heater.h"
+#include "substrate_cap.h"
 #include "time_windows.h"
 #include "ventilation.h"
 
@@ -38,6 +39,7 @@ enum class ConfigError : uint8_t {
   kBadFan,          // "ventilation" is not a well-formed two-level partial object.
   kBadDayNight,     // "jour_nuit" is not a valid day and night (RG-jour-et-nuit).
   kBadNightHeat,    // "chauffage_nuit" is not a partial {"consigne","hysteresis"}.
+  kBadSubstrate,    // "securite_substrat" is not a well-formed two-level partial object.
 };
 
 // The fields of "chauffage_nuit"; the loop merges and checks them.
@@ -72,6 +74,10 @@ struct ConfigCommand {
   control::DayNight dayNight;  // Whole, valid, seasons in date order.
   bool hasNightHeat;
   NightHeatPatch nightHeat;  // Merged and bounded by the loop (2026-016).
+  // Fields of "securite_substrat", merged with the current settings by the
+  // loop, which checks the bounds (RG-coupure-par-le-substrat, 2026-018).
+  bool hasSubstrate;
+  control::SubstrateSettingsPatch substrate;
 };
 
 // cmd/config: a JSON object with any of "consigne" and "hysteresis" in C,
@@ -80,7 +86,9 @@ struct ConfigCommand {
 // "sondes" (an object of probe names to "interieure" or "exterieure"),
 // "combinaison" (a combination name), "ventilation" (any of "jour", "nuit",
 // "hibernation" and "saturation", each partial), "jour_nuit" (whole) and
-// "chauffage_nuit" (partial), as RG-topics-mqtt writes them.
+// "chauffage_nuit" (partial) and "securite_substrat" (any of "active",
+// "approche", "jour", "nuit" and "sonde_muette", each partial, temperatures
+// to the tenth of a degree), as RG-topics-mqtt writes them.
 // Missing heat fields keep their `current` value. On any error, `out` is left
 // untouched: the command is refused whole (RG-reglages-bornes).
 ConfigError parseConfigPayload(const uint8_t* payload, size_t length,
@@ -115,9 +123,10 @@ enum class ModeOutcome : uint8_t {
 
 enum class SettingOutcome : uint8_t {
   kApplied,
-  kNotSaved,         // Applied, but lost at the next power cut.
-  kNoInteriorProbe,  // Refused whole: no probe would stay interior (RG-reglages-bornes).
-  kInvalidFan,       // Refused whole: ventilation out of bounds (RG-reglages-bornes).
+  kNotSaved,          // Applied, but lost at the next power cut.
+  kNoInteriorProbe,   // Refused whole: no probe would stay interior (RG-reglages-bornes).
+  kInvalidFan,        // Refused whole: ventilation out of bounds (RG-reglages-bornes).
+  kInvalidSubstrate,  // Refused whole: substrate cut out of bounds (RG-reglages-bornes).
 };
 
 // Events published on ssk-terrarium/<id>/event. Return false if truncated.
@@ -138,6 +147,9 @@ bool formatProbeHeatingEvent(control::HeatReason reason, char (&out)[kEventSize]
 // A setting too long to echo, by its field name: "ventilation", "jour_nuit".
 // `field` is a fixed string of the firmware, quoted verbatim.
 bool formatFieldEvent(const char* field, SettingOutcome outcome, char (&out)[kEventSize]);
+// The substrate cut switched on or off (RG-coupure-par-le-substrat): sent on
+// top of the answer to the command.
+bool formatSubstrateSafetyEvent(bool active, char (&out)[kEventSize]);
 // The night setpoint and hysteresis applied, or refused out of bounds.
 bool formatNightHeatEvent(const control::HeatSettings& settings, bool applied,
                           char (&out)[kEventSize]);

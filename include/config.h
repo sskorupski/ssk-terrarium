@@ -87,12 +87,19 @@ constexpr uint32_t kHeatContinuousMaxMs = 2UL * 60UL * 60UL * 1000UL;
 // Off time after the continuous-heat cap, then heating resumes on its own.
 constexpr uint32_t kHeatPauseMs = 15UL * 60UL * 1000UL;
 constexpr uint32_t kSensorSilentMaxMs = 2UL * 60UL * 1000UL;
-// Substrate cut (cadrage 2026-005, RG-coupure-par-le-substrat): heating off
-// once the substrate reaches kSubstrateCutAtC, until it falls strictly below
-// kSubstrateResumeBelowC. Fixed, whatever the setpoint; a probe silent for
-// kSensorSilentMaxMs lifts the cut.
-constexpr float kSubstrateCutAtC = 24.0f;
-constexpr float kSubstrateResumeBelowC = 18.5f;
+// Substrate cut (RG-coupure-par-le-substrat, cadrages 2026-005 and 2026-018):
+// heating off once the substrate reaches the cut of the moment, until it falls
+// strictly below its resume. Settable within the bounds below; these defaults,
+// in tenths of °C, are what it did before it was (active, day and night alike,
+// no approach, a silent probe lifts the cut after 2 minutes).
+constexpr int16_t kSubstrateCutAtTenths = 240;
+constexpr int16_t kSubstrateResumeBelowTenths = 185;
+constexpr int16_t kSubstrateApproachTenths = 0;
+constexpr uint16_t kSubstrateSilentDelayMin = 2;
+// Not settings: under "maintien", a silent cut lifts once the air is strictly
+// below the bottom of the frost band; the approach slices are 10 minutes.
+constexpr float kSubstrateHoldAirFloorC = kFrostHeatOnBelowC;
+constexpr uint32_t kSubstrateApproachSliceMs = 10UL * 60UL * 1000UL;
 
 // --- Bounds of the remote settings (RG-reglages-bornes), never overridable ----
 // A setpoint or hysteresis received from the network, or read back from NVS,
@@ -123,6 +130,19 @@ constexpr uint16_t kSaturationPauseMaxMin = 240;
 // while the time is unknown (RG-ventilation-periodique). Not settings.
 constexpr uint32_t kFanDailyMinGapMs = 12UL * 60UL * 60UL * 1000UL;
 constexpr uint32_t kFanDailyFallbackMs = 24UL * 60UL * 60UL * 1000UL;
+
+// Substrate cut (RG-reglages-bornes, decisions 02, 03 and 06 of 2026-018), in
+// tenths of °C and minutes: a cut from 20 to 28 °C, a resume from 15 °C and at
+// least 2 °C below its cut, a silent delay of 1 to 30 minutes, an approach of
+// 0 to 4 °C.
+constexpr int16_t kSubstrateCutMinTenths = 200;
+constexpr int16_t kSubstrateCutMaxTenths = 280;
+constexpr int16_t kSubstrateResumeMinTenths = 150;
+constexpr int16_t kSubstrateGapMinTenths = 20;
+constexpr int16_t kSubstrateApproachMinTenths = 0;
+constexpr int16_t kSubstrateApproachMaxTenths = 40;
+constexpr uint16_t kSubstrateSilentDelayMinMin = 1;
+constexpr uint16_t kSubstrateSilentDelayMaxMin = 30;
 
 // --- Alert thresholds (cadrage F9) --------------------------------------------
 
@@ -171,7 +191,20 @@ static_assert(kHeatHysteresisMinC <= kHeatHysteresisC && kHeatHysteresisC <= kHe
 static_assert(kFloorHeatOnBelowC < kFloorHeatOffAtC, "floor band must not be empty");
 static_assert(kFrostHeatOffAtC < kFloorHeatOnBelowC, "floor band overlaps frost protection");
 static_assert(kFloorHeatOffAtC < kAlertTempHighC, "floor band reaches the high alert threshold");
-static_assert(kSubstrateResumeBelowC < kSubstrateCutAtC, "substrate cut band must not be empty");
+static_assert(kSubstrateCutMinTenths <= kSubstrateCutAtTenths &&
+                  kSubstrateCutAtTenths <= kSubstrateCutMaxTenths,
+              "default substrate cut outside its bounds");
+static_assert(kSubstrateResumeMinTenths <= kSubstrateResumeBelowTenths &&
+                  kSubstrateResumeBelowTenths <= kSubstrateCutAtTenths - kSubstrateGapMinTenths,
+              "default substrate resume outside its bounds");
+static_assert(kSubstrateApproachMinTenths <= kSubstrateApproachTenths &&
+                  kSubstrateApproachTenths <= kSubstrateApproachMaxTenths,
+              "default substrate approach outside its bounds");
+static_assert(kSubstrateSilentDelayMinMin <= kSubstrateSilentDelayMin &&
+                  kSubstrateSilentDelayMin <= kSubstrateSilentDelayMaxMin,
+              "default silent delay outside its bounds");
+static_assert(kSubstrateApproachSliceMs % (60UL * 1000UL) == 0,
+              "the approach slice is whole minutes");
 static_assert(kDefaultTimeWindowCount <= 4, "at most four windows");
 static_assert(kSetpointMinC - kHeatHysteresisMaxC > kFrostHeatOffAtC,
               "lowest active band overlaps frost protection");
